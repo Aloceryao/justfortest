@@ -63,6 +63,8 @@ import {
   ChefHat,
   Coffee,
   QrCode,
+  HelpCircle,
+  Play, 
 } from 'lucide-react';
 
 // ==========================================
@@ -288,13 +290,7 @@ const ICON_TYPES = {
   whisky: {
     label: '威士忌杯',
     component: (props) => (
-      <svg
-        {...props}
-        viewBox="0 0 24 24"
-        fill="none"
-        stroke="currentColor"
-        strokeWidth="1.5"
-      >
+      <svg {...props} viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="1.5">
         <path d="M5 4h14v14a2 2 0 0 1-2 2H7a2 2 0 0 1-2-2V4z" />
         <path d="M5 10h14" />
       </svg>
@@ -303,13 +299,7 @@ const ICON_TYPES = {
   martini: {
     label: '馬丁尼杯',
     component: (props) => (
-      <svg
-        {...props}
-        viewBox="0 0 24 24"
-        fill="none"
-        stroke="currentColor"
-        strokeWidth="1.5"
-      >
+      <svg {...props} viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="1.5">
         <path d="M8 22h8" />
         <path d="M12 22v-11" />
         <path d="M2 3l10 10 10-10" />
@@ -319,13 +309,7 @@ const ICON_TYPES = {
   highball: {
     label: '高球杯',
     component: (props) => (
-      <svg
-        {...props}
-        viewBox="0 0 24 24"
-        fill="none"
-        stroke="currentColor"
-        strokeWidth="1.5"
-      >
+      <svg {...props} viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="1.5">
         <path d="M7 3h10v18a1 1 0 0 1-1 1H8a1 1 0 0 1-1-1V3z" />
       </svg>
     ),
@@ -333,13 +317,7 @@ const ICON_TYPES = {
   snifter: {
     label: '白蘭地杯',
     component: (props) => (
-      <svg
-        {...props}
-        viewBox="0 0 24 24"
-        fill="none"
-        stroke="currentColor"
-        strokeWidth="1.5"
-      >
+      <svg {...props} viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="1.5">
         <path d="M7 21h10" />
         <path d="M12 21v-3" />
         <path d="M6 10h12" />
@@ -350,13 +328,7 @@ const ICON_TYPES = {
   shot: {
     label: '一口杯',
     component: (props) => (
-      <svg
-        {...props}
-        viewBox="0 0 24 24"
-        fill="none"
-        stroke="currentColor"
-        strokeWidth="1.5"
-      >
+      <svg {...props} viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="1.5">
         <path d="M18 3l-2 18H8L6 3h12z" />
       </svg>
     ),
@@ -364,13 +336,7 @@ const ICON_TYPES = {
   wine: {
     label: '酒杯',
     component: (props) => (
-      <svg
-        {...props}
-        viewBox="0 0 24 24"
-        fill="none"
-        stroke="currentColor"
-        strokeWidth="1.5"
-      >
+      <svg {...props} viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="1.5">
         <path d="M9 21h6" />
         <path d="M12 21v-6" />
         <path d="M12 15a5 5 0 0 0 5-5c0-2-.5-4-1.5-4.5l-3.5 2-3.5-2C7.5 6 7 8 7 10a5 5 0 0 0 5 5z" />
@@ -380,13 +346,7 @@ const ICON_TYPES = {
   shaker: {
     label: '雪克杯',
     component: (props) => (
-      <svg
-        {...props}
-        viewBox="0 0 24 24"
-        fill="none"
-        stroke="currentColor"
-        strokeWidth="1.5"
-      >
+      <svg {...props} viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="1.5">
         <path d="M6 9h12v10a2 2 0 0 1-2 2H8a2 2 0 0 1-2-2V9z" />
         <path d="M6 5h12v4H6z" />
         <path d="M9 2h6v3H9z" />
@@ -396,13 +356,7 @@ const ICON_TYPES = {
   soft: {
     label: '軟飲',
     component: (props) => (
-      <svg
-        {...props}
-        viewBox="0 0 24 24"
-        fill="none"
-        stroke="currentColor"
-        strokeWidth="1.5"
-      >
+      <svg {...props} viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="1.5">
         <circle cx="12" cy="12" r="9" />
       </svg>
     ),
@@ -488,6 +442,143 @@ const calculateRecipeStats = (recipe, allIngredients) => {
     volume: Math.round(totalVolume),
     price,
   };
+};
+
+// Help Modal Component (New)
+const HelpModal = ({ isOpen, onClose }) => {
+  const [activeTab, setActiveTab] = useState('start');
+  if (!isOpen) return null;
+
+  const tabs = [
+    { id: 'start', label: '🚀 快速入門' },
+    { id: 'cost', label: '💰 成本與利潤' },
+    { id: 'customer', label: '📱 顧客模式' },
+    { id: 'faq', label: '❓ 常見問題' },
+  ];
+
+  return (
+    <div className="fixed inset-0 z-[100] flex items-center justify-center p-4 bg-black/80 backdrop-blur-sm animate-fade-in">
+      <div className="bg-slate-900 border border-slate-700 w-full max-w-lg rounded-2xl shadow-2xl overflow-hidden flex flex-col max-h-[85vh]">
+        <div className="flex justify-between items-center p-4 border-b border-slate-800 bg-slate-950">
+          <h3 className="text-lg font-bold text-white flex items-center gap-2">
+            <HelpCircle size={20} className="text-amber-500" /> 使用指南
+          </h3>
+          <button onClick={onClose} className="text-slate-400 hover:text-white">
+            <X size={24} />
+          </button>
+        </div>
+        
+        <div className="flex bg-slate-950 border-b border-slate-800 overflow-x-auto no-scrollbar">
+          {tabs.map((tab) => (
+            <button
+              key={tab.id}
+              onClick={() => setActiveTab(tab.id)}
+              className={`flex-1 py-3 px-4 text-sm font-bold whitespace-nowrap transition-colors ${
+                activeTab === tab.id
+                  ? 'text-amber-500 border-b-2 border-amber-500 bg-slate-900'
+                  : 'text-slate-500 hover:text-slate-300 hover:bg-slate-900/50'
+              }`}
+            >
+              {tab.label}
+            </button>
+          ))}
+        </div>
+
+        <div className="flex-1 overflow-y-auto p-6 text-slate-300 space-y-6 custom-scrollbar leading-relaxed">
+          {activeTab === 'start' && (
+            <div className="space-y-4">
+              <div>
+                <h4 className="text-white font-bold text-lg mb-2">歡迎使用酒吧管家！</h4>
+                <p>無論您是老闆或初學者，請跟著步驟建立您的第一份酒單：</p>
+              </div>
+              <ul className="space-y-3 list-disc pl-4 text-sm">
+                <li>
+                  <strong className="text-white">Shop ID (商店代碼)</strong>：這是您的專屬帳號。在不同手機輸入同一個 ID，資料就會同步。
+                </li>
+                <li>
+                  <strong className="text-white">Step 1. 建立材料</strong>：先到「材料庫」輸入您有的酒（如：琴酒、通寧水）。
+                </li>
+                <li>
+                  <strong className="text-white">Step 2. 建立酒譜</strong>：到「酒單」點擊 <strong>+</strong>，選擇剛才的材料，輸入容量 (ml)。
+                </li>
+                <li>
+                  <strong className="text-white">Step 3. 自動計算</strong>：系統會自動算出成本與酒精濃度。
+                </li>
+              </ul>
+              <div className="p-3 bg-amber-900/20 border border-amber-900/50 rounded-lg text-xs text-amber-200">
+                💡 小撇步：本 App 預設已載入多款「經典調酒」，您可以直接參考它們的比例喔！
+              </div>
+            </div>
+          )}
+
+          {activeTab === 'cost' && (
+            <div className="space-y-4">
+              <div>
+                <h4 className="text-white font-bold text-lg mb-2">成本與定價</h4>
+                <p>別讓利潤被吃掉！善用系統幫您計算。</p>
+              </div>
+              <div className="space-y-4 text-sm">
+                <div>
+                  <h5 className="text-amber-500 font-bold mb-1">設定成本率 (Target CR)</h5>
+                  <p>建議設定在 <strong>20% ~ 30%</strong>。調整拉桿時，系統會自動反推「建議售價」，確保您不會賠錢。</p>
+                </div>
+                <div>
+                  <h5 className="text-amber-500 font-bold mb-1">速算工具 (Quick Calc)</h5>
+                  <p>點擊設定旁的計算機圖示：</p>
+                  <ul className="list-disc pl-4 mt-1 space-y-1">
+                    <li><strong>純飲速算</strong>：輸入整瓶進價，馬上知道單杯 (Shot/Glass) 該賣多少。</li>
+                    <li><strong>草稿模式</strong>：研發新酒專用！隨意組合材料，即時預覽成本，滿意後可<strong>一鍵建立為正式酒譜</strong>。</li>
+                  </ul>
+                </div>
+              </div>
+            </div>
+          )}
+
+          {activeTab === 'customer' && (
+            <div className="space-y-4">
+              <div>
+                <h4 className="text-white font-bold text-lg mb-2">給客人看酒單</h4>
+                <p>兩種方式，讓點餐更優雅：</p>
+              </div>
+              <div className="space-y-4 text-sm">
+                 <div className="p-3 bg-slate-800 rounded-xl border border-slate-700">
+                    <h5 className="text-white font-bold mb-1">1. 平板模式 (鎖定)</h5>
+                    <p>在設定頁點擊 <strong>「鎖定為顧客模式」</strong>。畫面會鎖定在酒單，隱藏編輯按鈕與成本資訊。</p>
+                    <p className="mt-2 text-slate-500 text-xs">* 解鎖：點擊右上角鎖頭，輸入密碼。</p>
+                 </div>
+                 <div className="p-3 bg-slate-800 rounded-xl border border-slate-700">
+                    <h5 className="text-white font-bold mb-1">2. 掃碼點餐 (QR Code)</h5>
+                    <p>在設定頁有 <strong>專屬 QR Code</strong>。列印貼在桌上，客人掃描即可直接瀏覽酒單，無需下載 App。</p>
+                 </div>
+              </div>
+            </div>
+          )}
+
+          {activeTab === 'faq' && (
+            <div className="space-y-6 text-sm">
+              <div>
+                <h5 className="text-white font-bold mb-1">Q: 為什麼我刪不掉某個材料？</h5>
+                <p>A: 這是保護機制！如果該材料正在被任何酒譜使用，系統會禁止刪除。請先修改或刪除相關酒譜。</p>
+              </div>
+              <div>
+                <h5 className="text-white font-bold mb-1">Q: 換手機資料還在嗎？</h5>
+                <p>A: 還在！只要輸入相同的 <strong>Shop ID</strong> 與 <strong>身分</strong>，資料就會自動同步。</p>
+              </div>
+              <div>
+                <h5 className="text-white font-bold mb-1">Q: 沒有網路可以用嗎？</h5>
+                <p>A: 可以瀏覽舊資料，但新增或修改資料需要網路連線才能同步備份。</p>
+              </div>
+            </div>
+          )}
+        </div>
+        <div className="p-4 border-t border-slate-800 bg-slate-950">
+          <button onClick={onClose} className="w-full py-3 bg-slate-800 hover:bg-slate-700 text-white rounded-xl font-bold transition-colors">
+            我知道了
+          </button>
+        </div>
+      </div>
+    </div>
+  );
 };
 
 const PricingTable = ({ recipe }) => {
@@ -1389,8 +1480,9 @@ const FoodListScreen = ({
     </div>
   );
 };
+
 // ==========================================
-// 4. Screens (Part 2)
+// 4. Screens (RecipeListScreen included here!)
 // ==========================================
 
 const RecipeListScreen = ({
@@ -1788,7 +1880,6 @@ const RecipeListScreen = ({
     </div>
   );
 };
-
 const FeaturedSectionScreen = ({
   sections,
   setSections,
@@ -2579,7 +2670,8 @@ const InventoryScreen = ({
   );
 };
 
-const QuickCalcScreen = ({ ingredients, availableBases }) => {
+// 修正：QuickCalcScreen 新增 onCreateRecipe callback
+const QuickCalcScreen = ({ ingredients, availableBases, onCreateRecipe }) => {
   const [mode, setMode] = useState('single');
   const [price, setPrice] = useState('');
   const [volume, setVolume] = useState(700);
@@ -2608,6 +2700,19 @@ const QuickCalcScreen = ({ ingredients, availableBases }) => {
     draftStats.cost > 0
       ? Math.ceil(draftStats.cost / (targetCostRate / 100) / 10) * 10
       : 0;
+  
+  // 新增：處理一鍵建立酒譜
+  const handleCreateRecipe = () => {
+    if (draftIngs.length === 0) return alert('請先加入材料');
+    const recipeData = {
+      ingredients: draftIngs,
+      technique,
+      targetCostRate,
+      price: suggestedPrice, // 預設帶入建議售價
+    };
+    if(onCreateRecipe) onCreateRecipe(recipeData);
+  };
+
   const ingCategories = [
     { id: 'alcohol', label: '基酒 Alcohol' },
     { id: 'soft', label: '軟性飲料 Soft' },
@@ -2888,6 +2993,13 @@ const QuickCalcScreen = ({ ingredients, availableBases }) => {
                 </span>
               </div>
             </div>
+            {/* 新增：一鍵建立酒譜按鈕 */}
+            <button
+               onClick={handleCreateRecipe}
+               className="w-full py-3 bg-gradient-to-r from-amber-600 to-amber-700 text-white font-bold rounded-xl shadow-lg mt-4 flex items-center justify-center gap-2 hover:opacity-90 transition-opacity"
+            >
+               <Play size={20} fill="currentColor" /> ✨ 將此草稿建立為酒譜
+            </button>
           </div>
         )}
       </div>
@@ -2904,7 +3016,7 @@ const QuickCalcScreen = ({ ingredients, availableBases }) => {
 };
 
 // ==========================================
-// 4. Overlays (Editor & Viewer) - 修正基酒細項選單
+// 4. Overlays (Editor & Viewer) - 修正欄位名稱與按鈕樣式
 // ==========================================
 
 const EditorSheet = ({
@@ -3042,13 +3154,28 @@ const EditorSheet = ({
   const isSingle = item.type === 'single';
   const isFood = mode === 'food';
 
+  // 雙向連動：目標成本率變動 -> 更新售價
   const handleCostRateChange = (valStr) => {
+    const val = parseFloat(valStr);
+    
+    // 如果是酒譜模式且不是單品
+    if(mode === 'recipe' && !isSingle && !isFood) {
+        if(!isNaN(val) && val > 0 && stats.cost > 0) {
+            // Price = Cost / (Rate / 100)
+            // 取整數到十位
+            const newPrice = Math.ceil(stats.cost / (val/100) / 10) * 10;
+            setItem({ ...item, targetCostRate: val, price: newPrice });
+        } else {
+             setItem({ ...item, targetCostRate: valStr }); // 允許暫時輸入空字串或0
+        }
+        return;
+    }
+
     if (valStr === '') {
       const newItem = { ...item, targetCostRate: '' };
       setItem(newItem);
       return;
     }
-    const val = parseFloat(valStr);
     const newItem = { ...item, targetCostRate: val };
 
     if (!isNaN(val)) {
@@ -3062,6 +3189,23 @@ const EditorSheet = ({
     } else {
       setItem(newItem);
     }
+  };
+  
+  // 雙向連動：售價變動 -> 更新目標成本率
+  const handlePriceChange = (valStr) => {
+      const val = parseFloat(valStr);
+      if(mode === 'recipe' && !isSingle && !isFood) {
+          if(!isNaN(val) && val > 0 && stats.cost > 0) {
+              // Rate = (Cost / Price) * 100
+              const newRate = (stats.cost / val) * 100;
+              // 顯示小數點後一位
+              setItem({ ...item, price: val, targetCostRate: parseFloat(newRate.toFixed(1)) });
+          } else {
+              setItem({ ...item, price: valStr });
+          }
+          return;
+      }
+      setItem({ ...item, price: val });
   };
 
   const autoCalcPricesForIngredient = (currentItem) => {
@@ -3180,31 +3324,32 @@ const EditorSheet = ({
           <div className="grid grid-cols-2 gap-4">
             <div className="space-y-1 col-span-2">
               <label className="text-xs font-bold text-slate-500 uppercase">
-                中文名稱
+                {/* 欄位名稱修正 */}
+                {mode === 'ingredient' ? '材料中文名稱' : '調酒中文名稱'}
               </label>
               <input
                 value={item.nameZh}
                 onChange={(e) => setItem({ ...item, nameZh: e.target.value })}
                 className="w-full bg-slate-800 border border-slate-700 rounded-xl p-3 text-white focus:border-amber-500 outline-none"
-                placeholder="例如: 內格羅尼"
+                placeholder={mode === 'ingredient' ? "例如: 琴酒" : "例如: 內格羅尼"}
               />
             </div>
             <div className="space-y-1 col-span-2">
               <label className="text-xs font-bold text-slate-500 uppercase">
-                英文名稱
+                {mode === 'ingredient' ? '材料英文名稱' : '調酒英文名稱'}
               </label>
               <input
                 value={item.nameEn}
                 onChange={(e) => setItem({ ...item, nameEn: e.target.value })}
                 className="w-full bg-slate-800 border border-slate-700 rounded-xl p-3 text-white focus:border-amber-500 outline-none"
-                placeholder="e.g. Negroni"
+                placeholder={mode === 'ingredient' ? "e.g. Gin" : "e.g. Negroni"}
               />
             </div>
 
             {!isFood && (
               <div className="space-y-1">
                 <label className="text-xs font-bold text-slate-500 uppercase">
-                  分類
+                   {mode === 'recipe' ? '風格分類' : '分類'}
                 </label>
                 <select
                   value={item.type}
@@ -3378,7 +3523,7 @@ const EditorSheet = ({
               <div className="space-y-1">
                 <div className="flex justify-between">
                   <label className="text-xs font-bold text-slate-500 uppercase">
-                    基酒
+                    基酒分類
                   </label>
                   <button
                     onClick={() => {
@@ -3731,11 +3876,12 @@ const EditorSheet = ({
                     <label className="text-xs font-bold text-slate-500 uppercase">
                       酒譜材料
                     </label>
+                    {/* 修正：將新增材料按鈕放大 */}
                     <button
                       onClick={addRecipeIng}
-                      className="text-amber-500 text-xs font-bold flex items-center gap-1 hover:text-amber-400"
+                      className="w-full p-3 bg-slate-800/50 border border-dashed border-slate-600 rounded-xl text-slate-400 hover:text-white hover:border-slate-400 transition-colors text-center flex items-center justify-center gap-2 mb-2"
                     >
-                      <Plus size={14} /> 新增材料
+                      <Plus size={16} /> 加入材料
                     </button>
                   </div>
                   <div className="space-y-2">
@@ -3759,19 +3905,24 @@ const EditorSheet = ({
                               </span>
                             )}
                           </button>
-                          <input
-                            type="number"
-                            value={ingItem.amount}
-                            onChange={(e) =>
-                              handleRecipeIngChange(
-                                idx,
-                                'amount',
-                                Number(e.target.value)
-                              )
-                            }
-                            className="w-20 bg-slate-800 border border-slate-700 rounded-xl p-3 text-sm text-center text-white outline-none focus:border-amber-500 font-mono"
-                            placeholder="ml"
-                          />
+                          {/* 修正：輸入框加大並加上單位提示 */}
+                          <div className="relative w-24">
+                              <input
+                                type="number"
+                                value={ingItem.amount}
+                                onChange={(e) =>
+                                  handleRecipeIngChange(
+                                    idx,
+                                    'amount',
+                                    Number(e.target.value)
+                                  )
+                                }
+                                className="w-full bg-slate-800 border border-slate-700 rounded-xl p-3 pr-8 text-sm text-center text-white outline-none focus:border-amber-500 font-mono"
+                                placeholder="0"
+                              />
+                              <span className="absolute right-2 top-3 text-xs text-slate-500 pointer-events-none">ml</span>
+                          </div>
+                          
                           <button
                             onClick={() => removeRecipeIng(idx)}
                             className="p-3 text-slate-600 hover:text-rose-500"
@@ -3811,14 +3962,12 @@ const EditorSheet = ({
                   </div>
                   <div className="space-y-1">
                     <label className="text-xs font-bold text-slate-500 uppercase block">
-                      售價
+                      售價 (雙向連動)
                     </label>
                     <input
                       type="number"
                       value={item.price || ''}
-                      onChange={(e) =>
-                        setItem({ ...item, price: Number(e.target.value) })
-                      }
+                      onChange={(e) => handlePriceChange(e.target.value)}
                       placeholder={`建議: $${
                         Math.ceil(stats.cost / 0.3 / 10) * 10
                       }`}
@@ -4329,7 +4478,7 @@ const ViewerOverlay = ({
 };
 
 // ==========================================
-// 5. Login Screen (修正：括號與權限顯示)
+// 5. Login Screen
 // ==========================================
 
 const LoginScreen = ({ onLogin }) => {
@@ -4595,6 +4744,7 @@ function MainAppContent() {
   const [passwordInput, setPasswordInput] = useState('');
   const [newPasswordInput, setNewPasswordInput] = useState('');
   const [isSettingPassword, setIsSettingPassword] = useState(false);
+  const [showHelpModal, setShowHelpModal] = useState(false); // Help Modal
 
   const [newStaffName, setNewStaffName] = useState('');
   const [newStaffPwd, setNewStaffPwd] = useState('');
@@ -4695,9 +4845,6 @@ function MainAppContent() {
       setUserRole('customer');
       setIsLoggedIn(true);
       localStorage.setItem('bar_shop_id', urlShop);
-      // We don't necessarily save 'bar_user_role' to local storage here 
-      // to allow the owner to login normally next time without auto-redirect loop if they refresh without params.
-      // But for consistency let's save it.
       localStorage.setItem('bar_user_role', 'customer'); 
     }
 
@@ -4717,7 +4864,6 @@ function MainAppContent() {
     const savedShop = localStorage.getItem('bar_shop_id');
     const savedRole = localStorage.getItem('bar_user_role');
     
-    // Only auto-login from local storage if NOT coming from a URL parameter override attempt
     if (savedShop && savedRole && !urlShop) {
       setShopId(savedShop);
       setUserRole(savedRole);
@@ -4728,13 +4874,12 @@ function MainAppContent() {
     window.addEventListener('offline', () => setIsOnline(false));
   }, []);
 
-  // --- 新增：監聽 userRole 變化，如果是 customer 且在 tools 頁面，強制跳轉 ---
+  // 顧客模式強制跳轉
   useEffect(() => {
     if (userRole === 'customer' && activeTab === 'tools') {
       setActiveTab('recipes');
     }
   }, [userRole, activeTab]);
-  // -----------------------------------------------------------------------
 
   useEffect(() => {
     if (isLoggedIn && shopId && window.firebase && firebaseReady) {
@@ -4823,7 +4968,6 @@ function MainAppContent() {
     setRecipes([]);
     setFoodItems([]);
     setStaffList([]);
-    // Remove URL params on logout to prevent auto-relogin if user refreshes
     if (window.history.pushState) {
         const newurl = window.location.protocol + "//" + window.location.host + window.location.pathname;
         window.history.pushState({path:newurl},'',newurl);
@@ -5234,6 +5378,7 @@ function MainAppContent() {
           ingredients: [],
           type: 'classic',
           targetCostRate: '',
+          price: '', // Initialize
         });
       } else if (mode === 'food') {
         Object.assign(newItem, {
@@ -5335,6 +5480,7 @@ function MainAppContent() {
           <QuickCalcScreen
             ingredients={ingredients}
             availableBases={availableBases}
+            onCreateRecipe={(draftItem) => startEdit('recipe', draftItem)}
           />
         )}
 
@@ -5354,7 +5500,18 @@ function MainAppContent() {
               </p>
             </div>
 
-            {/* 新增：QR Code 產生區塊 (僅店長可見) */}
+            {/* 新增：Help Button (放在最上方，所有人可見) */}
+             <div className="bg-slate-900 p-4 rounded-xl border border-slate-800">
+                <button
+                  onClick={() => setShowHelpModal(true)}
+                  className="w-full flex items-center justify-between text-white font-bold"
+                >
+                   <span className="flex items-center gap-2"><HelpCircle size={20} className="text-amber-500"/> 使用教學 / FAQ</span>
+                   <ChevronLeft size={16} className="rotate-180 text-slate-500"/>
+                </button>
+             </div>
+
+            {/* QR Code 產生區塊 (僅店長可見) */}
             {isOwner && (
               <div className="bg-slate-900 p-4 rounded-xl space-y-4 border border-slate-800">
                 <h3 className="text-sm font-bold text-white flex gap-2 items-center">
@@ -5569,6 +5726,8 @@ function MainAppContent() {
       </main>
 
       {/* Overlays */}
+      <HelpModal isOpen={showHelpModal} onClose={() => setShowHelpModal(false)} />
+
       {showPasswordModal && (
         <div className="fixed inset-0 z-[80] bg-black/90 flex items-center justify-center p-6">
           <div className="bg-slate-900 border border-slate-700 w-full max-w-xs rounded-2xl p-6">
