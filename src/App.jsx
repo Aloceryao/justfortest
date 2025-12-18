@@ -64,7 +64,7 @@ import {
   Coffee,
   QrCode,
   HelpCircle,
-  Play, 
+  Play,
 } from 'lucide-react';
 
 // ==========================================
@@ -444,7 +444,7 @@ const calculateRecipeStats = (recipe, allIngredients) => {
   };
 };
 
-// Help Modal Component (New)
+// Help Modal Component (Main App)
 const HelpModal = ({ isOpen, onClose }) => {
   const [activeTab, setActiveTab] = useState('start');
   if (!isOpen) return null;
@@ -576,6 +576,36 @@ const HelpModal = ({ isOpen, onClose }) => {
             我知道了
           </button>
         </div>
+      </div>
+    </div>
+  );
+};
+
+// Login Help Modal Component (New)
+const LoginHelpModal = ({ isOpen, onClose }) => {
+  if (!isOpen) return null;
+  return (
+    <div className="fixed inset-0 z-[110] flex items-center justify-center p-6 bg-black/80 backdrop-blur-sm animate-fade-in">
+      <div className="bg-slate-900 border border-slate-700 w-full max-w-sm rounded-2xl shadow-2xl p-6 animate-scale-in">
+        <h3 className="text-xl font-bold text-white mb-4 text-center">如何開始使用？</h3>
+        <div className="space-y-4 text-sm text-slate-300">
+          <div className="p-3 bg-slate-800 rounded-xl border border-slate-700">
+            <strong className="text-amber-500 block mb-1">1. 無需註冊</strong>
+            <p>本系統沒有繁瑣的註冊流程，直接開始。</p>
+          </div>
+          <div className="p-3 bg-slate-800 rounded-xl border border-slate-700">
+            <strong className="text-amber-500 block mb-1">2. 設定您的 ID</strong>
+            <p>在「商店代碼」欄位，<strong>直接輸入您想要的代號</strong>（例如您的店名英文、或 Instagram 帳號）。這將是您未來的專屬帳號。</p>
+            <p className="mt-2 text-xs text-slate-500 italic">範例: intox_taipei</p>
+          </div>
+          <div className="p-3 bg-slate-800 rounded-xl border border-slate-700">
+            <strong className="text-amber-500 block mb-1">3. 立刻啟用</strong>
+            <p>選擇「店長」身分，輸入您想設定的管理密碼，系統會自動為您開通。</p>
+          </div>
+        </div>
+        <button onClick={onClose} className="w-full mt-6 py-3 bg-amber-600 hover:bg-amber-500 text-white rounded-xl font-bold transition-colors">
+          我瞭解了，開始輸入
+        </button>
       </div>
     </div>
   );
@@ -4478,7 +4508,7 @@ const ViewerOverlay = ({
 };
 
 // ==========================================
-// 5. Login Screen
+// 5. Login Screen (修正：括號與權限顯示)
 // ==========================================
 
 const LoginScreen = ({ onLogin }) => {
@@ -4489,6 +4519,7 @@ const LoginScreen = ({ onLogin }) => {
   const [selectedStaffId, setSelectedStaffId] = useState('');
   const [loadingStaff, setLoadingStaff] = useState(false);
   const [error, setError] = useState('');
+  const [showHelp, setShowHelp] = useState(false); // 新增
 
   useEffect(() => {
     if (role === 'staff' && shopId.length >= 3 && window.firebase) {
@@ -4591,7 +4622,7 @@ const LoginScreen = ({ onLogin }) => {
         Bar Manager
       </h1>
       <p className="text-slate-400 text-sm mb-8">
-        雲端調酒管理系統 v14.2 (Pro)
+        雲端調酒管理系統 v14.3 (Pro)
       </p>
 
       <div className="w-full max-w-sm space-y-4">
@@ -4610,6 +4641,15 @@ const LoginScreen = ({ onLogin }) => {
               className="absolute left-4 top-4 text-slate-500"
               size={20}
             />
+          </div>
+          {/* 新增：登入說明按鈕 */}
+          <div className="text-right">
+             <button 
+                onClick={() => setShowHelp(true)}
+                className="text-xs text-amber-500 hover:text-amber-400 underline py-1"
+             >
+                👉 第一次使用？如何建立帳號
+             </button>
           </div>
         </div>
 
@@ -4716,6 +4756,7 @@ const LoginScreen = ({ onLogin }) => {
           進入系統
         </button>
       </div>
+      <LoginHelpModal isOpen={showHelp} onClose={() => setShowHelp(false)} />
     </div>
   );
 };
