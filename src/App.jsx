@@ -62,7 +62,7 @@ import {
   Utensils,
   ChefHat,
   Coffee,
-  QrCode, // 新增 QR Code Icon
+  QrCode,
 } from 'lucide-react';
 
 // ==========================================
@@ -661,7 +661,7 @@ const RecipeCard = memo(({ recipe, ingredients, onClick, role }) => {
     [recipe, ingredients]
   );
   const isSingle = recipe.type === 'single' || recipe.isIngredient;
-  const isFood = recipe.type === 'food';
+  const isFood = recipe.type === 'food'; 
   const isOwnerOrManager = role === 'owner' || role === 'manager';
 
   const displayPrice = isSingle
@@ -838,8 +838,8 @@ const CategoryEditModal = ({
         const rawId = val.replace('TYPE_', '');
         const found = ingCategories.find((c) => c.id === rawId);
         if (found) {
-          setNameZh(found.label);
-          setNameEn(found.label);
+          setNameZh(found.label); 
+          setNameEn(found.label); 
         }
       } else {
         const parts = val.split(' ');
@@ -1390,7 +1390,7 @@ const FoodListScreen = ({
   );
 };
 // ==========================================
-// 4. Screens (補上缺失的 RecipeListScreen)
+// 4. Screens (Part 2)
 // ==========================================
 
 const RecipeListScreen = ({
@@ -1406,7 +1406,7 @@ const RecipeListScreen = ({
   availableBases,
   userRole,
   onUnlock,
-  ingCategories, // 確保這裡有接收到分類表
+  ingCategories,
 }) => {
   const [filterBases, setFilterBases] = useState([]);
   const [filterTags, setFilterTags] = useState([]);
@@ -1547,8 +1547,8 @@ const RecipeListScreen = ({
       .filter((i) => i.addToSingle)
       .map((i) => ({
         ...i,
-        category: 'single',
-        type: i.type,
+        category: 'single', 
+        type: i.type, 
         baseSpirit: i.subType || '',
         priceShot: i.priceShot || '',
         priceGlass: i.priceGlass || '',
@@ -1566,9 +1566,8 @@ const RecipeListScreen = ({
       const matchCat =
         recipeCategoryFilter === 'all' ||
         r.type === recipeCategoryFilter ||
-        (recipeCategoryFilter === 'single' &&
-          (r.type === 'soft' || r.isIngredient || r.type === 'single'));
-
+        (recipeCategoryFilter === 'single' && (r.type === 'soft' || r.isIngredient || r.type === 'single')); 
+        
       const matchSearch =
         safeString(r.nameZh).includes(searchTerm) ||
         safeString(r.nameEn).toLowerCase().includes(searchTerm.toLowerCase());
@@ -1594,7 +1593,8 @@ const RecipeListScreen = ({
         if (target) {
           if (target === 'TYPE_SOFT') {
             matchGrid = r.type === 'soft';
-          } else if (target.startsWith('TYPE_')) {
+          }
+          else if (target.startsWith('TYPE_')) {
             const rawType = target.replace('TYPE_', '');
             if (r.isIngredient) {
               matchGrid = r.type === rawType;
@@ -1783,11 +1783,12 @@ const RecipeListScreen = ({
         onClose={() => setShowCatModal(false)}
         onSave={handleAddCategory}
         availableBases={availableBases}
-        ingCategories={ingCategories}
+        ingCategories={ingCategories} 
       />
     </div>
   );
 };
+
 const FeaturedSectionScreen = ({
   sections,
   setSections,
@@ -2467,8 +2468,8 @@ const InventoryScreen = ({
               </button>
             ))}
         </div>
-
-        {/* 修正：子分類字體也稍微放大 (text-xs -> text-xs, button size increased) */}
+        
+        {/* 修正：子分類字體也稍微放大 (text-xs) */}
         {categoryFilter === 'alcohol' && (
           <div className="flex items-center gap-2 overflow-x-auto pb-2 mt-2 no-scrollbar w-full animate-slide-up">
             <span className="text-[10px] text-slate-500 font-bold shrink-0 uppercase tracking-wider pl-1">
@@ -4333,7 +4334,7 @@ const ViewerOverlay = ({
 
 const LoginScreen = ({ onLogin }) => {
   const [shopId, setShopId] = useState('');
-  const [role, setRole] = useState(null);
+  const [role, setRole] = useState(null); 
   const [password, setPassword] = useState('');
   const [staffList, setStaffList] = useState([]);
   const [selectedStaffId, setSelectedStaffId] = useState('');
@@ -4582,7 +4583,7 @@ function MainAppContent() {
 
   const [ingredients, setIngredients] = useState([]);
   const [recipes, setRecipes] = useState([]);
-  const [foodItems, setFoodItems] = useState([]);
+  const [foodItems, setFoodItems] = useState([]); 
   const [sections, setSections] = useState([]);
   const [staffList, setStaffList] = useState([]);
   const [isOnline, setIsOnline] = useState(navigator.onLine);
@@ -4694,10 +4695,10 @@ function MainAppContent() {
       setUserRole('customer');
       setIsLoggedIn(true);
       localStorage.setItem('bar_shop_id', urlShop);
-      // We don't necessarily save 'bar_user_role' to local storage here
+      // We don't necessarily save 'bar_user_role' to local storage here 
       // to allow the owner to login normally next time without auto-redirect loop if they refresh without params.
       // But for consistency let's save it.
-      localStorage.setItem('bar_user_role', 'customer');
+      localStorage.setItem('bar_user_role', 'customer'); 
     }
 
     const script = document.createElement('script');
@@ -4715,7 +4716,7 @@ function MainAppContent() {
 
     const savedShop = localStorage.getItem('bar_shop_id');
     const savedRole = localStorage.getItem('bar_user_role');
-
+    
     // Only auto-login from local storage if NOT coming from a URL parameter override attempt
     if (savedShop && savedRole && !urlShop) {
       setShopId(savedShop);
@@ -4726,6 +4727,14 @@ function MainAppContent() {
     window.addEventListener('online', () => setIsOnline(true));
     window.addEventListener('offline', () => setIsOnline(false));
   }, []);
+
+  // --- 新增：監聽 userRole 變化，如果是 customer 且在 tools 頁面，強制跳轉 ---
+  useEffect(() => {
+    if (userRole === 'customer' && activeTab === 'tools') {
+      setActiveTab('recipes');
+    }
+  }, [userRole, activeTab]);
+  // -----------------------------------------------------------------------
 
   useEffect(() => {
     if (isLoggedIn && shopId && window.firebase && firebaseReady) {
@@ -4816,12 +4825,8 @@ function MainAppContent() {
     setStaffList([]);
     // Remove URL params on logout to prevent auto-relogin if user refreshes
     if (window.history.pushState) {
-      const newurl =
-        window.location.protocol +
-        '//' +
-        window.location.host +
-        window.location.pathname;
-      window.history.pushState({ path: newurl }, '', newurl);
+        const newurl = window.location.protocol + "//" + window.location.host + window.location.pathname;
+        window.history.pushState({path:newurl},'',newurl);
     }
   };
 
@@ -5166,17 +5171,17 @@ function MainAppContent() {
 
     // 刪除保護機制 (Deletion Protection)
     if (type === 'ingredient') {
-      const usedInRecipes = recipes.filter(
-        (r) => r.ingredients && r.ingredients.some((ing) => ing.id === id)
+      const usedInRecipes = recipes.filter(r => 
+        r.ingredients && r.ingredients.some(ing => ing.id === id)
       );
 
       if (usedInRecipes.length > 0) {
-        const recipeNames = usedInRecipes.map((r) => r.nameZh).join(', ');
+        const recipeNames = usedInRecipes.map(r => r.nameZh).join(', ');
         showAlert(
-          '無法刪除',
+          '無法刪除', 
           `此材料正在被以下酒譜使用中：\n${recipeNames}\n\n請先從酒譜中移除此材料。`
         );
-        return;
+        return; 
       }
     }
 
@@ -5356,34 +5361,23 @@ function MainAppContent() {
                   <QrCode size={16} /> 顧客專屬 QR Code
                 </h3>
                 <div className="bg-white p-4 rounded-xl flex flex-col items-center justify-center">
-                  <img
-                    src={`https://api.qrserver.com/v1/create-qr-code/?size=200x200&data=${encodeURIComponent(
-                      window.location.origin +
-                        window.location.pathname +
-                        '?shop=' +
-                        shopId +
-                        '&mode=customer'
-                    )}`}
-                    alt="Customer QR"
-                    className="w-48 h-48"
-                  />
+                   <img
+                     src={`https://api.qrserver.com/v1/create-qr-code/?size=200x200&data=${encodeURIComponent(
+                       window.location.origin + window.location.pathname + '?shop=' + shopId + '&mode=customer'
+                     )}`}
+                     alt="Customer QR"
+                     className="w-48 h-48"
+                   />
                 </div>
                 <div className="text-center">
-                  <p className="text-xs text-slate-500 mb-2">
-                    掃描此 QR Code 可直接進入顧客模式
-                  </p>
+                  <p className="text-xs text-slate-500 mb-2">掃描此 QR Code 可直接進入顧客模式</p>
                   <button
-                    onClick={() => {
-                      const url =
-                        window.location.origin +
-                        window.location.pathname +
-                        '?shop=' +
-                        shopId +
-                        '&mode=customer';
-                      navigator.clipboard.writeText(url);
-                      alert('連結已複製');
-                    }}
-                    className="text-amber-500 text-xs underline"
+                     onClick={() => {
+                       const url = window.location.origin + window.location.pathname + '?shop=' + shopId + '&mode=customer';
+                       navigator.clipboard.writeText(url);
+                       alert('連結已複製');
+                     }}
+                     className="text-amber-500 text-xs underline"
                   >
                     複製連結
                   </button>
@@ -5643,7 +5637,8 @@ function MainAppContent() {
           { id: 'featured', icon: Star, l: '專區' },
           showInventory && { id: 'ingredients', icon: GlassWater, l: '材料' },
           showQuickCalc && { id: 'quick', icon: Calculator, l: '速算' },
-          { id: 'tools', icon: Settings, l: '設定' },
+          // 修改處：若為 customer 則不顯示 Tools (設定)
+          userRole !== 'customer' && { id: 'tools', icon: Settings, l: '設定' },
         ]
           .filter(Boolean)
           .map((t) => (
