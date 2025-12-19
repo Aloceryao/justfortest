@@ -745,7 +745,8 @@ const IngredientRow = memo(({ ing, onClick, onDelete, readOnly }) => (
         </div>
         <div className="text-slate-500 text-xs truncate flex items-center gap-1">
           <span className="truncate">{safeString(ing.nameEn)}</span>
-          {ing.type === 'alcohol' && ing.subType && (
+          {/* 修改：顯示通用子分類 */}
+          {ing.subType && (
             <span className="shrink-0 text-[10px] bg-slate-700 px-1.5 py-0.5 rounded text-slate-400">
               {safeString(ing.subType).split(' ')[0]}
             </span>
@@ -1200,14 +1201,13 @@ const CategoryGrid = ({
     </div>
   );
 };
-
 const IngredientPickerModal = ({
   isOpen,
   onClose,
   onSelect,
   ingredients,
   categories,
-  availableBases,
+  categorySubItems, // 新增：傳入所有分類的子分類設定
 }) => {
   const [search, setSearch] = useState('');
   const [activeCat, setActiveCat] = useState('all');
@@ -1216,15 +1216,23 @@ const IngredientPickerModal = ({
   useEffect(() => {
     setActiveSubCat('all');
   }, [activeCat]);
+  
   if (!isOpen) return null;
+
+  // 取得目前選定大分類的子分類列表
+  const currentSubOptions = activeCat !== 'all' && categorySubItems 
+    ? (categorySubItems[activeCat] || []) 
+    : [];
 
   const filtered = ingredients.filter((i) => {
     const matchSearch =
       safeString(i.nameZh).toLowerCase().includes(search.toLowerCase()) ||
       safeString(i.nameEn).toLowerCase().includes(search.toLowerCase());
     const matchCat = activeCat === 'all' || i.type === activeCat;
+    
     let matchSub = true;
-    if (activeCat === 'alcohol' && activeSubCat !== 'all') {
+    if (activeCat !== 'all' && activeSubCat !== 'all') {
+      // 只要是該分類下的子分類篩選，都要比對 subType
       matchSub = i.subType === activeSubCat;
     }
     return matchSearch && matchCat && matchSub;
@@ -1251,7 +1259,9 @@ const IngredientPickerModal = ({
             />
           </div>
         </div>
-        <div className="flex gap-2 p-2 px-4 overflow-x-auto border-b border-slate-800 shrink-0 no-scrollbar">
+        
+        {/* 大分類選擇 (自動換行) */}
+        <div className="flex flex-wrap gap-2 p-4 border-b border-slate-800 shrink-0 bg-slate-950">
           <button
             onClick={() => setActiveCat('all')}
             className={`px-3 py-1.5 rounded-full text-xs whitespace-nowrap border transition-colors ${
@@ -1276,8 +1286,10 @@ const IngredientPickerModal = ({
             </button>
           ))}
         </div>
-        {activeCat === 'alcohol' && availableBases && (
-          <div className="flex gap-2 p-2 px-4 overflow-x-auto border-b border-slate-800 shrink-0 no-scrollbar bg-slate-900/50 animate-slide-up">
+
+        {/* 子分類選擇 (自動換行，支援所有分類) */}
+        {activeCat !== 'all' && currentSubOptions.length > 0 && (
+          <div className="flex flex-wrap gap-2 px-4 pb-4 border-b border-slate-800 shrink-0 bg-slate-900/50 animate-slide-up pt-2">
             <button
               onClick={() => setActiveSubCat('all')}
               className={`px-3 py-1.5 rounded-full text-[10px] whitespace-nowrap border transition-colors ${
@@ -1288,7 +1300,7 @@ const IngredientPickerModal = ({
             >
               全部
             </button>
-            {availableBases.map((b) => (
+            {currentSubOptions.map((b) => (
               <button
                 key={b}
                 onClick={() => setActiveSubCat(b)}
@@ -1303,6 +1315,7 @@ const IngredientPickerModal = ({
             ))}
           </div>
         )}
+
         <div className="flex-1 overflow-y-auto p-4 space-y-2 custom-scrollbar bg-slate-950">
           {filtered.map((ing) => (
             <button
@@ -1420,8 +1433,7 @@ const FoodListScreen = ({
           )}
         </div>
 
-        {/* 這裡已經將按鈕放大 (text-sm, px-4 py-2) */}
-        <div className="flex items-center gap-2 overflow-x-auto px-4 pb-2 no-scrollbar w-full">
+        <div className="flex flex-wrap gap-2 px-4 pb-2 w-full">
           <button
             onClick={() => setActiveCat('all')}
             className={`whitespace-nowrap px-4 py-2 rounded-full text-sm font-bold transition-all select-none ${
@@ -1525,7 +1537,7 @@ const RecipeListScreen = ({
   startEdit,
   setViewingItem,
   availableTags,
-  availableBases,
+  categorySubItems, // Update: Pass this prop
   userRole,
   onUnlock,
   ingCategories,
@@ -1625,13 +1637,24 @@ const RecipeListScreen = ({
   const showGrid =
     !searchTerm && !activeBlock && recipeCategoryFilter !== 'all';
 
+  // 取得所有可用基酒與子分類的清單 (Flatten logic)
+  const allSubTypes = useMemo(() => {
+      let list = [];
+      if(categorySubItems) {
+          Object.values(categorySubItems).forEach(subList => {
+              if(Array.isArray(subList)) list = [...list, ...subList];
+          });
+      }
+      return list;
+  }, [categorySubItems]);
+
   const handleBlockSelect = (cat) => {
     setActiveBlock(cat);
     const target = cat.targetBase;
     if (target && !target.startsWith('TYPE_')) {
-      if (availableBases.includes(target)) setFilterBases([target]);
+      if (allSubTypes.includes(target)) setFilterBases([target]);
     } else if (!target) {
-      const baseMatch = availableBases.find(
+      const baseMatch = allSubTypes.find(
         (b) => b.includes(cat.nameZh) || b.includes(cat.nameEn)
       );
       if (baseMatch) setFilterBases([baseMatch]);
@@ -1705,7 +1728,7 @@ const RecipeListScreen = ({
       if (activeBlock) {
         let target = activeBlock.targetBase;
         if (!target) {
-          const found = availableBases.find(
+          const found = allSubTypes.find(
             (b) =>
               b.includes(activeBlock.nameZh) || b.includes(activeBlock.nameEn)
           );
@@ -1741,7 +1764,7 @@ const RecipeListScreen = ({
     filterBases,
     filterTags,
     activeBlock,
-    availableBases,
+    allSubTypes,
   ]);
 
   const isConsumer = userRole === 'customer';
@@ -1815,7 +1838,7 @@ const RecipeListScreen = ({
             <div className="mb-4">
               <ChipSelector
                 title="基酒篩選 (Base)"
-                options={availableBases}
+                options={allSubTypes} // Update: Use all available subtypes
                 selected={filterBases}
                 onSelect={setFilterBases}
               />
@@ -1904,7 +1927,7 @@ const RecipeListScreen = ({
         isOpen={showCatModal}
         onClose={() => setShowCatModal(false)}
         onSave={handleAddCategory}
-        availableBases={availableBases}
+        availableBases={allSubTypes} // Update
         ingCategories={ingCategories} 
       />
     </div>
@@ -2376,7 +2399,8 @@ const InventoryScreen = ({
   setIngCategories,
   showConfirm,
   onBatchAdd,
-  availableBases,
+  categorySubItems, // 接收子分類資料結構
+  onAddSubCategory, // 接收新增子分類的 function
   isReadOnly,
 }) => {
   const [categoryFilter, setCategoryFilter] = useState('all');
@@ -2386,6 +2410,10 @@ const InventoryScreen = ({
   const [showBatchModal, setShowBatchModal] = useState(false);
   const [batchText, setBatchText] = useState('');
   const [batchCategory, setBatchCategory] = useState('other');
+  
+  // 新增子分類相關
+  const [isAddingSubCat, setIsAddingSubCat] = useState(false);
+  const [newSubCatName, setNewSubCatName] = useState('');
 
   const [sortBy, setSortBy] = useState('name');
   const [search, setSearch] = useState('');
@@ -2413,6 +2441,16 @@ const InventoryScreen = ({
       if (categoryFilter === id) setCategoryFilter('all');
     });
   };
+  
+  // 處理新增子分類
+  const handleAddNewSubCat = () => {
+      if(newSubCatName.trim() && onAddSubCategory) {
+          onAddSubCategory(categoryFilter, newSubCatName.trim());
+          setNewSubCatName('');
+          setIsAddingSubCat(false);
+      }
+  };
+
   const handleBatchSubmit = () => {
     const lines = batchText.split('\n').filter((line) => line.trim() !== '');
     if (lines.length === 0) return;
@@ -2435,9 +2473,12 @@ const InventoryScreen = ({
   const filteredIngredients = useMemo(() => {
     let list = ingredients.filter((i) => {
       if (categoryFilter !== 'all' && i.type !== categoryFilter) return false;
-      if (categoryFilter === 'alcohol' && subCategoryFilter !== 'all') {
+      
+      // 改良版篩選邏輯：不再只限制 'alcohol'
+      if (categoryFilter !== 'all' && subCategoryFilter !== 'all') {
         return i.subType === subCategoryFilter;
       }
+      
       if (
         search &&
         !(
@@ -2457,6 +2498,11 @@ const InventoryScreen = ({
     }
     return list;
   }, [ingredients, categoryFilter, subCategoryFilter, sortBy, search]);
+
+  // 取得目前選定大分類的子分類列表
+  const currentSubOptions = categoryFilter !== 'all' && categorySubItems 
+    ? (categorySubItems[categoryFilter] || []) 
+    : [];
 
   return (
     <div className="h-full flex flex-col w-full bg-slate-950">
@@ -2521,8 +2567,8 @@ const InventoryScreen = ({
           )}
         </div>
 
-        {/* 修正：字體放大 (text-sm) 且內距增加 (px-4 py-2) */}
-        <div className="flex items-center gap-2 overflow-x-auto pb-2 no-scrollbar w-full">
+        {/* 大分類 (改為 flex-wrap 以支援多分類換行) */}
+        <div className="flex flex-wrap gap-2 pb-2 w-full">
           <button
             onClick={() => setCategoryFilter('all')}
             className={`whitespace-nowrap px-4 py-2 rounded-full text-sm font-bold transition-all select-none ${
@@ -2590,10 +2636,10 @@ const InventoryScreen = ({
             ))}
         </div>
         
-        {/* 修正：子分類字體也稍微放大 (text-xs) */}
-        {categoryFilter === 'alcohol' && (
-          <div className="flex items-center gap-2 overflow-x-auto pb-2 mt-2 no-scrollbar w-full animate-slide-up">
-            <span className="text-[10px] text-slate-500 font-bold shrink-0 uppercase tracking-wider pl-1">
+        {/* 子分類 (修正：支援所有分類，使用 flex-wrap 自動換行，支援直接新增) */}
+        {categoryFilter !== 'all' && (
+          <div className="flex flex-wrap gap-2 pb-2 mt-2 w-full animate-slide-up bg-slate-900/30 p-2 rounded-lg">
+            <span className="text-[10px] text-slate-500 font-bold uppercase tracking-wider py-1.5 flex items-center">
               細項:
             </span>
             <button
@@ -2601,24 +2647,56 @@ const InventoryScreen = ({
               className={`whitespace-nowrap px-3 py-1.5 rounded text-xs font-medium transition-colors border ${
                 subCategoryFilter === 'all'
                   ? 'bg-slate-700 border-slate-600 text-white'
-                  : 'border-transparent text-slate-500'
+                  : 'border-transparent text-slate-500 hover:text-slate-300'
               }`}
             >
               全部
             </button>
-            {availableBases.map((spirit) => (
+            {currentSubOptions.map((subItem) => (
               <button
-                key={spirit}
-                onClick={() => setSubCategoryFilter(spirit)}
+                key={subItem}
+                onClick={() => setSubCategoryFilter(subItem)}
                 className={`whitespace-nowrap px-3 py-1.5 rounded text-xs font-medium transition-colors border ${
-                  subCategoryFilter === spirit
+                  subCategoryFilter === subItem
                     ? 'bg-slate-700 border-slate-600 text-white'
-                    : 'border-transparent text-slate-500'
+                    : 'border-transparent text-slate-500 hover:text-slate-300'
                 }`}
               >
-                {safeString(spirit).split(' ')[0]}
+                {safeString(subItem).split(' ')[0]}
               </button>
             ))}
+            
+            {/* 新增子分類的按鈕 */}
+            {!isReadOnly && (
+                isAddingSubCat ? (
+                    <div className="flex items-center bg-slate-800 rounded px-2 py-1 border border-slate-600 animate-fade-in h-[26px]">
+                        <input
+                          autoFocus
+                          className="bg-transparent text-xs text-white w-20 outline-none"
+                          placeholder="新子分類"
+                          value={newSubCatName}
+                          onChange={(e) => setNewSubCatName(e.target.value)}
+                          onKeyDown={(e) => e.key === 'Enter' && handleAddNewSubCat()}
+                          onBlur={() => {
+                            if (!newSubCatName) setIsAddingSubCat(false);
+                          }}
+                        />
+                        <button
+                          onClick={handleAddNewSubCat}
+                          className="text-amber-500 ml-1"
+                        >
+                          <Check size={12} />
+                        </button>
+                    </div>
+                ) : (
+                    <button
+                      onClick={() => setIsAddingSubCat(true)}
+                      className="px-2 py-1.5 rounded text-xs font-medium border border-slate-700 border-dashed text-slate-500 hover:text-amber-500 hover:border-amber-500 transition-colors"
+                    >
+                      +
+                    </button>
+                )
+            )}
           </div>
         )}
       </div>
@@ -2699,7 +2777,6 @@ const InventoryScreen = ({
     </div>
   );
 };
-
 // 修正：QuickCalcScreen 新增 onCreateRecipe callback
 const QuickCalcScreen = ({ ingredients, availableBases, onCreateRecipe }) => {
   const [mode, setMode] = useState('single');
@@ -3062,8 +3139,9 @@ const EditorSheet = ({
   setAvailableTags,
   availableGlasses,
   setAvailableGlasses,
-  availableBases,
-  setAvailableBases,
+  availableBases, // 保留相容性
+  categorySubItems, // 新增：傳入所有子分類設定
+  onAddSubCategory, // 新增：傳入新增子分類的 function
   requestDelete,
   ingCategories,
   setIngCategories,
@@ -3089,8 +3167,13 @@ const EditorSheet = ({
     if (addingItem === 'glass') setAvailableGlasses([...availableGlasses, val]);
     if (addingItem === 'tag') setAvailableTags([...availableTags, val]);
 
-    if (addingItem === 'base') {
-      setAvailableBases([...availableBases, val]);
+    if (addingItem === 'base' || addingItem === 'subType') {
+      // 判斷是新增基酒還是通用子分類
+      const targetCategory = mode === 'ingredient' ? item.type : 'alcohol'; // 酒譜模式預設加到 alcohol
+      if(onAddSubCategory) {
+          onAddSubCategory(targetCategory, val);
+      }
+      
       if (mode === 'ingredient') setItem({ ...item, subType: val });
       if (mode === 'recipe') setItem({ ...item, baseSpirit: val });
     }
@@ -3187,7 +3270,7 @@ const EditorSheet = ({
   // 雙向連動：目標成本率變動 -> 更新售價
   const handleCostRateChange = (valStr) => {
     const val = parseFloat(valStr);
-    
+     
     // 如果是酒譜模式且不是單品
     if(mode === 'recipe' && !isSingle && !isFood) {
         if(!isNaN(val) && val > 0 && stats.cost > 0) {
@@ -3220,7 +3303,7 @@ const EditorSheet = ({
       setItem(newItem);
     }
   };
-  
+   
   // 雙向連動：售價變動 -> 更新目標成本率
   const handlePriceChange = (valStr) => {
       const val = parseFloat(valStr);
@@ -3274,6 +3357,11 @@ const EditorSheet = ({
     }
     setPickerTargetIndex(null);
   };
+
+  // 取得目前分類的子選項列表
+  const currentSubOptions = (mode === 'ingredient' && categorySubItems) 
+    ? (categorySubItems[item.type] || [])
+    : (categorySubItems['alcohol'] || []);
 
   return (
     <div className="fixed inset-0 z-50 flex justify-end">
@@ -3475,15 +3563,16 @@ const EditorSheet = ({
               </div>
             )}
 
-            {mode === 'ingredient' && item.type === 'alcohol' && (
+            {/* 修改：現在所有材料分類都支援子分類 */}
+            {mode === 'ingredient' && (
               <div className="space-y-1 animate-fade-in">
                 <div className="flex justify-between items-center">
                   <label className="text-xs font-bold text-slate-500 uppercase">
-                    基酒細項
+                    細項分類
                   </label>
                   <button
                     onClick={() => {
-                      setAddingItem('base');
+                      setAddingItem('subType');
                       setNewItemValue('');
                     }}
                     className="text-[10px] text-amber-500 hover:text-amber-400 border border-amber-500/30 px-2 py-0.5 rounded"
@@ -3491,7 +3580,7 @@ const EditorSheet = ({
                     + 自訂
                   </button>
                 </div>
-                {addingItem === 'base' ? (
+                {addingItem === 'subType' ? (
                   <div className="flex gap-2 h-[46px] items-center animate-slide-up">
                     <input
                       autoFocus
@@ -3499,7 +3588,7 @@ const EditorSheet = ({
                       onChange={(e) => setNewItemValue(e.target.value)}
                       onKeyDown={(e) => e.key === 'Enter' && handleAddItem()}
                       className="w-full bg-slate-800 border border-amber-500 rounded px-2 py-1 text-xs text-white outline-none"
-                      placeholder="輸入新基酒..."
+                      placeholder="輸入新分類..."
                     />
                     <button
                       onClick={handleAddItem}
@@ -3524,9 +3613,7 @@ const EditorSheet = ({
                       className="w-full bg-slate-800 border border-slate-700 rounded-xl p-3 text-white outline-none focus:border-amber-500 appearance-none"
                     >
                       <option value="">-- 無 --</option>
-                      {availableBases
-                        .filter((b) => !b.includes('Soft') && !b.includes('軟'))
-                        .map((b) => (
+                      {currentSubOptions.map((b) => (
                           <option key={b} value={b}>
                             {b}
                           </option>
@@ -3597,7 +3684,8 @@ const EditorSheet = ({
                     className="w-full bg-slate-800 border border-slate-700 rounded-xl p-3 text-white outline-none focus:border-amber-500 appearance-none"
                   >
                     <option value="">其他</option>
-                    {availableBases.map((b) => (
+                    {/* 酒譜這裡我們暫時列出所有子分類 */}
+                    {(categorySubItems['alcohol'] || []).map((b) => (
                       <option key={b} value={b}>
                         {b}
                       </option>
@@ -3952,7 +4040,7 @@ const EditorSheet = ({
                               />
                               <span className="absolute right-2 top-3 text-xs text-slate-500 pointer-events-none">ml</span>
                           </div>
-                          
+                           
                           <button
                             onClick={() => removeRecipeIng(idx)}
                             className="p-3 text-slate-600 hover:text-rose-500"
@@ -4229,6 +4317,7 @@ const EditorSheet = ({
         onSelect={handlePickerSelect}
         ingredients={ingredients}
         categories={ingCategories}
+        categorySubItems={categorySubItems} // 傳入子分類設定
         availableBases={availableBases}
       />
     </div>
@@ -4643,11 +4732,12 @@ const LoginScreen = ({ onLogin }) => {
             />
           </div>
           {/* 新增：登入說明按鈕 */}
-          <div className="text-right">
+          <div className="mt-3 mb-2">
              <button 
                 onClick={() => setShowHelp(true)}
-                className="text-xs text-amber-500 hover:text-amber-400 underline py-1"
+                className="w-full py-3 bg-amber-900/40 border border-amber-500 text-amber-400 rounded-xl text-base font-bold hover:bg-amber-900/60 transition-all flex items-center justify-center gap-2 shadow-lg shadow-amber-900/20"
              >
+                <HelpCircle size={20} />
                 👉 第一次使用？如何建立帳號
              </button>
           </div>
@@ -4835,6 +4925,39 @@ function MainAppContent() {
   useEffect(() => {
     localStorage.setItem('bar_custom_bases_v1', JSON.stringify(availableBases));
   }, [availableBases]);
+  
+  // 新增：管理所有分類的子分類清單 (Map: CategoryID -> SubCategoryList[])
+  const [categorySubItems, setCategorySubItems] = useState(() => {
+      try {
+          const saved = localStorage.getItem('bar_category_subitems_v1');
+          if(saved) return JSON.parse(saved);
+          
+          // 預設值
+          return {
+              alcohol: DEFAULT_BASE_SPIRITS,
+              soft: ['Soda 蘇打', 'Juice 果汁', 'Syrup 糖漿', 'Tea 茶', 'Coffee 咖啡'],
+              other: ['Spice 香料', 'Fruit 水果', 'Garnish 裝飾'],
+          };
+      } catch(e) {
+          return { alcohol: DEFAULT_BASE_SPIRITS };
+      }
+  });
+  
+  useEffect(() => {
+      localStorage.setItem('bar_category_subitems_v1', JSON.stringify(categorySubItems));
+  }, [categorySubItems]);
+  
+  // 新增子分類的處理函數
+  const handleAddSubCategory = (catId, subCatName) => {
+      setCategorySubItems(prev => {
+          const currentList = prev[catId] || [];
+          if(currentList.includes(subCatName)) return prev;
+          return {
+              ...prev,
+              [catId]: [...currentList, subCatName]
+          };
+      });
+  };
 
   const [foodCategories, setFoodCategories] = useState(() => {
     try {
@@ -4904,7 +5027,7 @@ function MainAppContent() {
 
     const savedShop = localStorage.getItem('bar_shop_id');
     const savedRole = localStorage.getItem('bar_user_role');
-    
+     
     if (savedShop && savedRole && !urlShop) {
       setShopId(savedShop);
       setUserRole(savedRole);
@@ -5468,6 +5591,7 @@ function MainAppContent() {
             setViewingItem={setViewingItem}
             availableTags={availableTags}
             availableBases={availableBases}
+            categorySubItems={categorySubItems} // 傳遞子分類資料
             userRole={canEdit ? 'owner' : 'customer'}
             isConsumerMode={!canEdit}
             onUnlock={handleUnlockRequest}
@@ -5513,6 +5637,8 @@ function MainAppContent() {
             showConfirm={showConfirm}
             onBatchAdd={handleBatchAddIngredients}
             availableBases={availableBases}
+            categorySubItems={categorySubItems} // 傳遞子分類資料
+            onAddSubCategory={handleAddSubCategory} // 傳遞新增子分類 function
             isReadOnly={isStaff}
           />
         )}
@@ -5577,7 +5703,7 @@ function MainAppContent() {
                      }}
                      className="text-amber-500 text-xs underline"
                   >
-                    複製連結
+                   複製連結
                   </button>
                 </div>
               </div>
@@ -5869,6 +5995,8 @@ function MainAppContent() {
         availableGlasses={availableGlasses}
         setAvailableGlasses={setAvailableGlasses}
         availableBases={availableBases}
+        categorySubItems={categorySubItems} // 傳遞子分類設定
+        onAddSubCategory={handleAddSubCategory} // 傳遞新增功能
         setAvailableBases={setAvailableBases}
         requestDelete={requestDelete}
         ingCategories={ingCategories}
