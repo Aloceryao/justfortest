@@ -109,7 +109,7 @@ const loadFirebase = () => {
   });
 };
 
-const compressImage = (base64Str, maxWidth = 1200, quality = 0.85) => {
+const compressImage = (base64Str, maxWidth = 1600, quality = 0.9) => {
   return new Promise((resolve) => {
     const img = new Image();
     img.src = base64Str;
@@ -124,6 +124,9 @@ const compressImage = (base64Str, maxWidth = 1200, quality = 0.85) => {
       canvas.width = width;
       canvas.height = height;
       const ctx = canvas.getContext('2d');
+      // ★ 關鍵：加入這兩行優化渲染品質
+      ctx.imageSmoothingEnabled = true;
+      ctx.imageSmoothingQuality = 'high'; 
       ctx.drawImage(img, 0, 0, width, height);
       resolve(canvas.toDataURL('image/jpeg', quality));
     };
@@ -5671,7 +5674,6 @@ const handleUnlockConfirm = () => {
     const col =
       mode === 'recipe' ? 'recipes' : mode === 'food' ? 'foods' : 'ingredients';
     if (item.image && item.image.startsWith('data:')) {
-      item.image = await compressImage(item.image);
       await ImageDB.save(item.id, item.image);
     }
     await db
