@@ -109,7 +109,7 @@ const loadFirebase = () => {
   });
 };
 
-const compressImage = (base64Str, maxWidth = 1600, quality = 0.9) => {
+const compressImage = (base64Str, maxWidth = 1920, quality = 0.95) => {
   return new Promise((resolve) => {
     const img = new Image();
     img.src = base64Str;
