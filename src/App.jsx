@@ -5992,6 +5992,23 @@ const handleUnlockConfirm = () => {
                 >
                   <RefreshCcw size={14} /> 重置系統 (危險)
                 </button>
+                {/* === 暫時的除靈按鈕 (修復完後可刪除) === */}
+                <button
+                  onClick={() => {
+                    // 只保留「有ID」且「有名字」的正常資料
+                    const cleanRecipes = recipes.filter(r => r.id && r.nameZh && r.nameZh.trim() !== '');
+                    
+                    setRecipes(cleanRecipes);
+                    // 強制更新本地暫存
+                    localStorage.setItem('bar_recipes_v3', JSON.stringify(cleanRecipes));
+                    
+                    alert(`除靈成功！已清除 ${recipes.length - cleanRecipes.length} 筆幽靈資料。`);
+                  }}
+                  className="w-full py-3 mt-3 bg-slate-800 border border-amber-500 text-amber-500 rounded-xl font-bold flex items-center justify-center gap-2 hover:bg-slate-700"
+                >
+                   🧹 清除幽靈酒譜 (異常資料)
+                </button>
+                {/* === 結束 === */}
               </div>
             )}
 
