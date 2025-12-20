@@ -378,7 +378,7 @@ const safeString = (str) => (str || '').toString();
 // ==========================================
 // ★ 版本號設定 (修改這裡會同步更新登入頁與設定頁)
 // ==========================================
-const APP_VERSION = 'v15.1 (照片加大版)';
+const APP_VERSION = 'v15.2 (質感升級版)';
 const safeNumber = (num) => {
   const n = parseFloat(num);
   return isNaN(n) ? 0 : n;
@@ -4383,15 +4383,20 @@ const ViewerOverlay = ({
         onClick={onClose}
       />
       <div className="relative w-full md:w-[600px] bg-slate-950 h-full shadow-2xl flex flex-col animate-slide-up overflow-hidden">
-        {/* 上方圖片區 */}
+        
+        {/* ========================================== */}
+        {/* 1. 上方圖片區 (h-[500px] 大圖) */}
+        {/* ========================================== */}
         <div className="relative h-[500px] shrink-0">
           <AsyncImage
             imageId={item.image}
             alt={item.nameZh}
             className="w-full h-full object-cover"
           />
-          <div className="absolute inset-0 bg-gradient-to-t from-slate-950 via-slate-950/50 to-transparent"></div>
+          {/* 漸層遮罩：確保文字清楚 */}
+          <div className="absolute inset-0 bg-gradient-to-t from-slate-950 via-slate-950/20 to-transparent"></div>
 
+          {/* 返回按鈕 */}
           <button
             onClick={onClose}
             className="absolute top-12 left-4 z-50 p-2 bg-black/30 backdrop-blur rounded-full text-white hover:bg-white/20 transition shadow-lg"
@@ -4400,59 +4405,74 @@ const ViewerOverlay = ({
             <ChevronLeft size={24} />
           </button>
 
-          <div className="absolute bottom-0 left-0 p-6 w-full">
-            <div className="flex gap-2 mb-2">
+          {/* ★★★ 標題與標籤區 (壓在圖片左下角) ★★★ */}
+          <div className="absolute bottom-0 left-0 p-6 w-full z-10">
+            {/* 第一排：標籤群 (含風味標籤) */}
+            <div className="flex flex-wrap gap-2 mb-3">
+              {/* 餐點/單品標籤 */}
               {isFood && (
-                <span className="text-[10px] text-emerald-200 bg-emerald-900/40 px-1.5 py-0.5 rounded border border-emerald-800/50">
+                <span className="text-[10px] text-emerald-200 bg-emerald-900/60 backdrop-blur px-2 py-0.5 rounded border border-emerald-500/30">
                   {item.category || '餐點'}
                 </span>
               )}
               {isSingle ? (
-                <span className="text-[10px] text-purple-200 bg-purple-900/40 px-1.5 py-0.5 rounded border border-purple-800/50">
+                <span className="text-[10px] text-purple-200 bg-purple-900/60 backdrop-blur px-2 py-0.5 rounded border border-purple-500/30">
                   Single 單品
                 </span>
               ) : (
                 item.baseSpirit && (
-                  <span className="text-[10px] text-blue-200 bg-blue-900/40 px-1.5 py-0.5 rounded border border-blue-800/50">
+                  <span className="text-[10px] text-blue-200 bg-blue-900/60 backdrop-blur px-2 py-0.5 rounded border border-blue-500/30">
                     {item.baseSpirit}
                   </span>
                 )
               )}
               {!isSingle && !isFood && (
-                <span className="text-[10px] text-amber-200 bg-amber-900/40 px-1.5 py-0.5 rounded border border-amber-800/50">
+                <span className="text-[10px] text-amber-200 bg-amber-900/60 backdrop-blur px-2 py-0.5 rounded border border-amber-500/30">
                   {item.technique}
                 </span>
               )}
+              
+              {/* ★ 新增：風味標籤移到這裡 (半透明白色質感) */}
+              {item.tags?.map((tag) => (
+                <span
+                  key={tag}
+                  className="text-[10px] text-white bg-white/10 backdrop-blur px-2 py-0.5 rounded border border-white/20"
+                >
+                  #{tag}
+                </span>
+              ))}
             </div>
-            <h1 className="text-3xl font-serif font-bold text-white mb-1">
+
+            {/* 第二排：酒名 */}
+            <h1 className="text-3xl font-serif font-bold text-white mb-1 drop-shadow-md">
               {item.nameZh}
             </h1>
-            <p className="text-slate-300 font-medium text-lg opacity-90">
+            <p className="text-slate-300 font-medium text-lg opacity-90 drop-shadow-sm">
               {item.nameEn}
             </p>
           </div>
         </div>
 
-        {/* 下方內容區 */}
+        {/* ========================================== */}
+        {/* 下方內容區 (可滑動) */}
+        {/* ========================================== */}
         <div className="flex-1 overflow-y-auto custom-scrollbar bg-slate-950">
-          <div className="p-6 space-y-8 pb-8">
+          <div className="p-6 space-y-6 pb-8">
             
-            {/* ★★★ 數據顯示區塊 (橫向排列版：原液｜含水) ★★★ */}
+            {/* 2. 數據條 (Data Bar) */}
             {!isSingle && (
               <div className="flex justify-between items-center bg-slate-900/50 p-4 rounded-2xl border border-slate-800/50 backdrop-blur-sm">
                 {!isFood && (
                   <div className="text-center">
-                    <div className="text-xs text-slate-500 uppercase tracking-wider mb-1">
-                      酒精濃度 (原液｜含水)
+                    <div className="text-[10px] text-slate-500 uppercase tracking-wider mb-1">
+                      ABV (原液｜含水)
                     </div>
-                    {/* 修改重點：橫向排列，字體顏色大小一致 */}
                     <div className="text-lg font-bold text-amber-500 flex items-center justify-center gap-1">
                       {stats.dilution > 0 ? (
                         <>
                           <span>{stats.rawAbv.toFixed(1)}%</span>
                           <span className="text-slate-600 mx-1">|</span>
                           <span>{stats.finalAbv.toFixed(1)}%</span>
-                          <span className="text-[10px] opacity-80 self-end mb-1">(含水)</span>
                         </>
                       ) : (
                         <span>{stats.finalAbv.toFixed(1)}%</span>
@@ -4461,12 +4481,11 @@ const ViewerOverlay = ({
                   </div>
                 )}
                 
-                {/* 分隔線與成本率 (老闆/員工模式才顯示) */}
                 {!isConsumerMode && !isFood && (
                   <>
                     <div className="w-px h-8 bg-slate-800 mx-2"></div>
                     <div className="text-center">
-                      <div className="text-xs text-slate-500 uppercase tracking-wider mb-1">
+                      <div className="text-[10px] text-slate-500 uppercase tracking-wider mb-1">
                         成本率
                       </div>
                       <div
@@ -4486,9 +4505,8 @@ const ViewerOverlay = ({
                   <div className="w-px h-8 bg-slate-800 mx-2"></div>
                 )}
                 
-                {/* 售價 */}
                 <div className="text-center flex-1">
-                  <div className="text-xs text-slate-500 uppercase tracking-wider mb-1">
+                  <div className="text-[10px] text-slate-500 uppercase tracking-wider mb-1">
                     售價
                   </div>
                   <div className="text-xl font-bold text-slate-200 font-mono">
@@ -4498,48 +4516,47 @@ const ViewerOverlay = ({
               </div>
             )}
 
-            {/* 單品價格表 */}
-            {isSingle && !isConsumerMode && <PricingTable recipe={item} />}
+            {/* 3. 風味描述 (放在數據條正下方) */}
+            {item.flavorDescription && (
+              <div className="bg-amber-900/10 border-l-2 border-amber-500/50 p-4 rounded-r-xl">
+                <p className="text-amber-100/90 italic text-sm leading-relaxed">
+                  "{item.flavorDescription}"
+                </p>
+              </div>
+            )}
 
-            {/* 單品價格表 (顧客模式) */}
+            {/* 單品價格表 (特殊區塊) */}
+            {isSingle && !isConsumerMode && <PricingTable recipe={item} />}
             {isSingle && isConsumerMode && (
               <div className="grid grid-cols-3 gap-2 w-full text-center bg-slate-900/50 p-4 rounded-2xl border border-slate-800/50">
                 {item.priceShot && (
                   <div className="p-2 border border-slate-700 rounded-lg">
                     <div className="text-[10px] text-slate-400">Shot</div>
-                    <div className="text-amber-400 font-bold">
-                      ${item.priceShot}
-                    </div>
+                    <div className="text-amber-400 font-bold">${item.priceShot}</div>
                   </div>
                 )}
                 {item.priceGlass && (
                   <div className="p-2 border border-amber-500/30 rounded-lg shadow-sm shadow-amber-500/10">
-                    <div className="text-[10px] text-amber-500 font-bold">
-                      Glass
-                    </div>
-                    <div className="text-amber-400 font-bold text-lg">
-                      ${item.priceGlass}
-                    </div>
+                    <div className="text-[10px] text-amber-500 font-bold">Glass</div>
+                    <div className="text-amber-400 font-bold text-lg">${item.priceGlass}</div>
                   </div>
                 )}
                 {item.priceBottle && (
                   <div className="p-2 border border-slate-700 rounded-lg">
                     <div className="text-[10px] text-slate-400">Bottle</div>
-                    <div className="text-amber-400 font-bold">
-                      ${item.priceBottle}
-                    </div>
+                    <div className="text-amber-400 font-bold">${item.priceBottle}</div>
                   </div>
                 )}
               </div>
             )}
 
-            {/* 材料列表區塊 */}
+            {/* 4. 材料列表 */}
             {!isSingle && !isFood && (
-              <div>
-                <h3 className="text-sm font-bold text-slate-500 uppercase tracking-wider mb-3 flex items-center gap-2">
-                  <Layers size={16} /> 材料
+              <div className="mt-4">
+                <h3 className="text-xs font-bold text-slate-500 uppercase tracking-wider mb-3 flex items-center gap-2">
+                  <Layers size={14} /> 材料 Ingredients
                 </h3>
-                <div className="space-y-3">
+                <div className="space-y-3 pl-1">
                   {item.ingredients.map((ingItem, idx) => {
                     const ing = ingredients.find((i) => i.id === ingItem.id);
                     return (
@@ -4548,87 +4565,70 @@ const ViewerOverlay = ({
                         className="flex justify-between items-center py-2 border-b border-slate-800/50"
                       >
                         <div className="flex-1">
-                          <span className="text-slate-200 font-medium">
+                          <span className="text-slate-200 font-medium text-base">
                             {ing?.nameZh || '未知材料'}
                           </span>
-                          {!isConsumerMode && (
-                            <span className="text-[10px] text-slate-500 font-mono ml-2">
-                              ({ing?.abv || 0}%)
-                            </span>
-                          )}
+                          <span className="block text-xs text-slate-500">
+                             {ing?.nameEn}
+                          </span>
                         </div>
                         {!isConsumerMode && (
-                          <span className="text-amber-500 font-mono font-bold">
-                            {ingItem.amount}ml
+                          <span className="text-amber-500 font-mono font-bold text-lg">
+                            {ingItem.amount} <span className="text-xs font-normal text-amber-500/70">ml</span>
                           </span>
                         )}
                       </div>
                     );
                   })}
                   {item.garnish && (
-                    <div className="flex justify-between items-center py-2 border-b border-slate-800/50">
-                      <span className="text-slate-400 italic">
-                        Garnish: {item.garnish}
+                    <div className="flex justify-between items-center py-2 border-b border-slate-800/50 mt-2">
+                      <span className="text-slate-400 italic text-sm">
+                        Garnish (裝飾)
+                      </span>
+                      <span className="text-slate-300 font-medium">
+                        {item.garnish}
                       </span>
                     </div>
                   )}
-                  {/* 融水顯示 (列表下方) */}
+                  {/* 融水顯示 */}
                   {!isConsumerMode && stats.dilution > 0 && (
-                     <div className="flex justify-between items-center py-2 border-b border-slate-800/50">
-                        <span className="text-blue-400/80 italic text-sm">
-                           + Dilution (融水 {item.technique})
-                        </span>
-                        <span className="text-blue-400 font-mono font-bold">
-                           {stats.dilution}ml
-                        </span>
-                     </div>
+                    <div className="flex justify-between items-center py-2 border-b border-slate-800/50">
+                      <span className="text-blue-400/70 italic text-sm">
+                         + Dilution (融水)
+                      </span>
+                      <span className="text-blue-400 font-mono font-bold">
+                         {stats.dilution} ml
+                      </span>
+                    </div>
                   )}
                 </div>
               </div>
             )}
 
-            {/* 步驟與描述區塊 */}
-            {!isFood && (
-              <div>
-                <h3 className="text-sm font-bold text-slate-500 uppercase tracking-wider mb-3 flex items-center gap-2">
-                  {isConsumerMode ? (
-                    <BookOpen size={16} />
-                  ) : (
-                    <ListPlus size={16} />
-                  )}{' '}
-                  {isConsumerMode ? '介紹' : '步驟/備註'}
+            {/* 5. 製作步驟 (只在非顧客模式顯示) */}
+            {!isConsumerMode && !isFood && (
+              <div className="mt-6 pt-4 border-t border-slate-800">
+                <h3 className="text-xs font-bold text-slate-500 uppercase tracking-wider mb-3 flex items-center gap-2">
+                  <ListPlus size={14} /> 製作步驟 Steps
                 </h3>
-                <div className="text-slate-300 leading-relaxed whitespace-pre-line bg-slate-900/30 p-4 rounded-xl border border-slate-800/50">
-                  {item.steps || '無描述'}
+                <div className="text-slate-300 leading-relaxed whitespace-pre-line bg-slate-900/50 p-4 rounded-xl border border-slate-800/50 text-sm">
+                  {item.steps || '尚無步驟描述'}
                 </div>
               </div>
             )}
+            
+            {/* 餐點的介紹 (餐點模式下對所有人顯示) */}
+            {isFood && item.steps && (
+               <div className="mt-4">
+                 <h3 className="text-xs font-bold text-slate-500 uppercase tracking-wider mb-2">
+                   介紹
+                 </h3>
+                 <div className="text-slate-300 leading-relaxed whitespace-pre-line">
+                   {item.steps}
+                 </div>
+               </div>
+            )}
 
-            {/* 風味標籤區塊 */}
-            <div className="space-y-4">
-              {item.flavorDescription && (
-                <div className="bg-gradient-to-br from-amber-900/10 to-transparent p-4 rounded-xl border border-amber-500/10 relative">
-                  <Quote
-                    className="absolute top-2 left-2 text-amber-500/20"
-                    size={24}
-                  />
-                  <p className="text-amber-200/80 italic text-center relative z-10 text-sm">
-                    "{item.flavorDescription}"
-                  </p>
-                </div>
-              )}
-
-              <div className="flex flex-wrap gap-2">
-                {item.tags?.map((tag) => (
-                  <span
-                    key={tag}
-                    className="text-xs text-slate-500 bg-slate-900 border border-slate-800 px-3 py-1 rounded-full"
-                  >
-                    #{tag}
-                  </span>
-                ))}
-              </div>
-            </div>
           </div>
         </div>
 
