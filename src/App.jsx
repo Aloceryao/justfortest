@@ -378,7 +378,7 @@ const safeString = (str) => (str || '').toString();
 // ==========================================
 // ★ 版本號設定 (修改這裡會同步更新登入頁與設定頁)
 // ==========================================
-const APP_VERSION = 'v15.2 (質感升級版)';
+const APP_VERSION = 'v15.3 (升級版)';
 const safeNumber = (num) => {
   const n = parseFloat(num);
   return isNaN(n) ? 0 : n;
@@ -1985,8 +1985,14 @@ const FeaturedSectionScreen = ({
   const [activeSectionId, setActiveSectionId] = useState(null);
   const [isAdding, setIsAdding] = useState(false);
   const [isEditing, setIsEditing] = useState(false);
+  
+  // ★ 修改：新增描述欄位的狀態
   const [newSectionTitle, setNewSectionTitle] = useState('');
+  const [newSectionDesc, setNewSectionDesc] = useState(''); // 新增
+  
   const [newSubgroupTitle, setNewSubgroupTitle] = useState('');
+  const [newSubgroupDesc, setNewSubgroupDesc] = useState(''); // 新增
+
   const [showPicker, setShowPicker] = useState(false);
   const [pickingForSubgroupId, setPickingForSubgroupId] = useState(null);
   const [pickerSearch, setPickerSearch] = useState('');
@@ -2028,13 +2034,16 @@ const FeaturedSectionScreen = ({
       const newSec = {
         id: generateId(),
         title: newSectionTitle.trim(),
+        description: newSectionDesc.trim(), // ★ 儲存描述
         subgroups: [],
       };
       syncToCloud([...sections, newSec]);
       setNewSectionTitle('');
+      setNewSectionDesc(''); // 重置
       setIsAdding(false);
     }
   };
+
   const handleDeleteSection = (id) => {
     showConfirm('刪除專區', '確定刪除此專區？', () => {
       const newSecs = sections.filter((s) => s.id !== id);
@@ -2043,6 +2052,7 @@ const FeaturedSectionScreen = ({
       if (activeSectionId === id) setActiveSectionId(null);
     });
   };
+
   const handleAddSubgroup = (sectionId) => {
     if (newSubgroupTitle.trim()) {
       const updatedSections = sections.map((s) => {
@@ -2054,6 +2064,7 @@ const FeaturedSectionScreen = ({
               {
                 id: generateId(),
                 title: newSubgroupTitle.trim(),
+                description: newSubgroupDesc.trim(), // ★ 儲存子專區描述
                 recipeIds: [],
               },
             ],
@@ -2063,9 +2074,11 @@ const FeaturedSectionScreen = ({
       });
       syncToCloud(updatedSections);
       setNewSubgroupTitle('');
+      setNewSubgroupDesc(''); // 重置
       setIsAdding(false);
     }
   };
+
   const handleDeleteSubgroup = (sectionId, subgroupId) => {
     showConfirm('刪除分類', '確定刪除此分類？', () => {
       const updatedSections = sections.map((s) => {
@@ -2080,6 +2093,7 @@ const FeaturedSectionScreen = ({
       syncToCloud(updatedSections);
     });
   };
+
   const handleAddRecipeToSubgroup = (recipeId) => {
     const updatedSections = sections.map((s) => {
       if (s.id === activeSectionId) {
@@ -2099,6 +2113,7 @@ const FeaturedSectionScreen = ({
     syncToCloud(updatedSections);
     setShowPicker(false);
   };
+
   const handleRemoveRecipeFromSubgroup = (subgroupId, recipeId) => {
     const updatedSections = sections.map((s) => {
       if (s.id === activeSectionId) {
@@ -2125,6 +2140,7 @@ const FeaturedSectionScreen = ({
     return null;
   }
 
+  // --- 專區列表模式 (第一層) ---
   if (!activeSectionId) {
     return (
       <div className="h-full flex flex-col w-full bg-slate-950">
@@ -2146,6 +2162,8 @@ const FeaturedSectionScreen = ({
                       onClick={() => {
                         setIsAdding(!isAdding);
                         setIsEditing(false);
+                        setNewSectionTitle('');
+                        setNewSectionDesc('');
                       }}
                       className={`p-2 rounded-full border transition-all ${
                         isAdding
@@ -2175,29 +2193,38 @@ const FeaturedSectionScreen = ({
           </div>
         </div>
         <div className="flex-1 overflow-y-auto p-4 space-y-4 pb-32 custom-scrollbar">
+          {/* ★ 修改：新增專區的輸入介面 */}
           {isAdding && (
-            <div className="bg-slate-800 p-3 rounded-xl flex gap-2 border border-slate-700 animate-slide-up">
+            <div className="bg-slate-800 p-4 rounded-xl flex flex-col gap-3 border border-slate-700 animate-slide-up">
+              <div className="text-xs font-bold text-slate-500 uppercase">新增大專區</div>
               <input
                 value={newSectionTitle}
                 onChange={(e) => setNewSectionTitle(e.target.value)}
-                placeholder="新專區名稱"
-                className="flex-1 bg-slate-900 border border-slate-600 rounded p-2 text-sm text-white outline-none"
+                placeholder="專區名稱 (例如: 冬季限定)"
+                className="w-full bg-slate-900 border border-slate-600 rounded p-2 text-sm text-white outline-none focus:border-amber-500"
                 autoFocus
+              />
+              <input
+                value={newSectionDesc}
+                onChange={(e) => setNewSectionDesc(e.target.value)}
+                placeholder="描述 (選填，例如: 暖心推薦)"
+                className="w-full bg-slate-900 border border-slate-600 rounded p-2 text-sm text-slate-300 outline-none focus:border-amber-500"
               />
               <button
                 onClick={handleAddSection}
-                className="bg-amber-600 text-white px-3 py-2 rounded font-bold text-sm"
+                className="w-full bg-amber-600 hover:bg-amber-500 text-white py-2 rounded font-bold text-sm transition-colors"
               >
-                確認
+                確認新增
               </button>
             </div>
           )}
+          
           <div className="space-y-4">
             {sections.map((section) => (
               <div key={section.id} className="relative group">
                 <div
                   onClick={() => setActiveSectionId(section.id)}
-                  className="bg-gradient-to-br from-slate-800 to-slate-900 border border-slate-700 rounded-2xl p-6 cursor-pointer hover:border-amber-500/50 transition-all relative overflow-hidden shadow-lg h-32 flex flex-col justify-center active:scale-[0.98]"
+                  className="bg-gradient-to-br from-slate-800 to-slate-900 border border-slate-700 rounded-2xl p-6 cursor-pointer hover:border-amber-500/50 transition-all relative overflow-hidden shadow-lg h-36 flex flex-col justify-center active:scale-[0.98]"
                 >
                   <div className="absolute top-0 right-0 p-4 opacity-10 group-hover:opacity-20 transition-opacity">
                     <BookOpen size={80} />
@@ -2205,7 +2232,13 @@ const FeaturedSectionScreen = ({
                   <h2 className="text-2xl font-serif text-white font-bold mb-1 relative z-10">
                     {section.title}
                   </h2>
-                  <p className="text-slate-500 text-sm relative z-10">
+                  {/* ★ 顯示描述 */}
+                  {section.description && (
+                    <p className="text-amber-500/80 text-sm font-medium relative z-10 mb-1">
+                      {section.description}
+                    </p>
+                  )}
+                  <p className="text-slate-500 text-xs relative z-10 mt-1">
                     {section.subgroups?.length || 0} 個子分類
                   </p>
                 </div>
@@ -2234,6 +2267,7 @@ const FeaturedSectionScreen = ({
     );
   }
 
+  // --- 子分類詳情模式 (第二層) ---
   return (
     <div className="h-full flex flex-col w-full bg-slate-950">
       <div className="shrink-0 bg-slate-950/95 backdrop-blur z-20 border-b border-slate-800 shadow-md px-4 pt-safe pb-3">
@@ -2244,9 +2278,14 @@ const FeaturedSectionScreen = ({
           >
             <ChevronLeft size={20} />
           </button>
-          <h2 className="text-xl font-serif text-white font-bold flex-1 truncate">
-            {activeSection.title}
-          </h2>
+          <div className="flex-1 truncate">
+             <h2 className="text-xl font-serif text-white font-bold truncate">
+                {activeSection.title}
+             </h2>
+             {/* 頂部標題下方也顯示描述 (選用) */}
+             {/* <p className="text-[10px] text-slate-400">{activeSection.description}</p> */}
+          </div>
+          
           {isConsumer ? (
             <button
               onClick={onUnlock}
@@ -2261,6 +2300,8 @@ const FeaturedSectionScreen = ({
                   onClick={() => {
                     setIsAdding(!isAdding);
                     setIsEditing(false);
+                    setNewSubgroupTitle('');
+                    setNewSubgroupDesc('');
                   }}
                   className={`p-2 rounded-full border transition-all ${
                     isAdding
@@ -2289,54 +2330,72 @@ const FeaturedSectionScreen = ({
         </div>
       </div>
       <div className="flex-1 overflow-y-auto p-4 space-y-6 pb-32 custom-scrollbar">
+        {/* ★ 修改：新增子分類的輸入介面 */}
         {isAdding && (
-          <div className="bg-slate-800 p-3 rounded-xl flex gap-2 border border-slate-700 animate-slide-up">
+          <div className="bg-slate-800 p-4 rounded-xl flex flex-col gap-3 border border-slate-700 animate-slide-up">
+            <div className="text-xs font-bold text-slate-500 uppercase">新增子分類</div>
             <input
               value={newSubgroupTitle}
               onChange={(e) => setNewSubgroupTitle(e.target.value)}
-              placeholder="新子分類名稱"
-              className="flex-1 bg-slate-900 border border-slate-600 rounded p-2 text-sm text-white outline-none"
+              placeholder="子分類名稱 (例如: 熱紅酒)"
+              className="w-full bg-slate-900 border border-slate-600 rounded p-2 text-sm text-white outline-none focus:border-amber-500"
               autoFocus
+            />
+            <input
+              value={newSubgroupDesc}
+              onChange={(e) => setNewSubgroupDesc(e.target.value)}
+              placeholder="描述 (選填，例如: 聖誕節必備)"
+              className="w-full bg-slate-900 border border-slate-600 rounded p-2 text-sm text-slate-300 outline-none focus:border-amber-500"
             />
             <button
               onClick={() => handleAddSubgroup(activeSection.id)}
-              className="bg-amber-600 text-white px-3 py-2 rounded font-bold text-sm"
+              className="w-full bg-amber-600 hover:bg-amber-500 text-white py-2 rounded font-bold text-sm transition-colors"
             >
-              確認
+              確認新增
             </button>
           </div>
         )}
+        
         <div className="space-y-8">
           {activeSection.subgroups.map((subgroup) => (
             <div key={subgroup.id} className="space-y-3 relative">
-              <div className="flex justify-between items-center border-b border-slate-800 pb-2">
-                <h3 className="text-lg font-bold text-amber-500">
-                  {subgroup.title}
-                </h3>
-                <div className="flex gap-2">
-                  {canEdit && isEditing && (
-                    <button
-                      onClick={() =>
-                        handleDeleteSubgroup(activeSection.id, subgroup.id)
-                      }
-                      className="text-rose-500 p-1"
-                    >
-                      <Trash2 size={16} />
-                    </button>
-                  )}
-                  {canEdit && (
-                    <button
-                      onClick={() => {
-                        setPickingForSubgroupId(subgroup.id);
-                        setShowPicker(true);
-                      }}
-                      className="text-slate-400 hover:text-white flex items-center gap-1 text-xs bg-slate-800 px-2 py-1 rounded-full border border-slate-700"
-                    >
-                      <Plus size={12} /> 新增酒譜
-                    </button>
-                  )}
+              <div className="border-b border-slate-800 pb-2">
+                <div className="flex justify-between items-center">
+                  <h3 className="text-lg font-bold text-amber-500">
+                    {subgroup.title}
+                  </h3>
+                  <div className="flex gap-2">
+                    {canEdit && isEditing && (
+                      <button
+                        onClick={() =>
+                          handleDeleteSubgroup(activeSection.id, subgroup.id)
+                        }
+                        className="text-rose-500 p-1"
+                      >
+                        <Trash2 size={16} />
+                      </button>
+                    )}
+                    {canEdit && (
+                      <button
+                        onClick={() => {
+                          setPickingForSubgroupId(subgroup.id);
+                          setShowPicker(true);
+                        }}
+                        className="text-slate-400 hover:text-white flex items-center gap-1 text-xs bg-slate-800 px-2 py-1 rounded-full border border-slate-700"
+                      >
+                        <Plus size={12} /> 新增酒譜
+                      </button>
+                    )}
+                  </div>
                 </div>
+                {/* ★ 顯示子分類描述 */}
+                {subgroup.description && (
+                  <p className="text-sm text-slate-400 mt-1">
+                    {subgroup.description}
+                  </p>
+                )}
               </div>
+              
               <div className="grid gap-3">
                 {subgroup.recipeIds.length > 0 ? (
                   subgroup.recipeIds.map((rid) => {
@@ -3475,24 +3534,45 @@ const EditorSheet = ({
           <div className="grid grid-cols-2 gap-4">
             <div className="space-y-1 col-span-2">
               <label className="text-xs font-bold text-slate-500 uppercase">
-                {mode === 'ingredient' ? '材料中文名稱' : '調酒中文名稱'}
+                {/* 這裡加入了判斷：如果是餐點，就顯示餐點名稱 */}
+                {mode === 'ingredient'
+                  ? '材料中文名稱'
+                  : mode === 'food'
+                  ? '餐點中文名稱'
+                  : '調酒中文名稱'}
               </label>
               <input
                 value={item.nameZh}
                 onChange={(e) => setItem({ ...item, nameZh: e.target.value })}
                 className="w-full bg-slate-800 border border-slate-700 rounded-xl p-3 text-white focus:border-amber-500 outline-none"
-                placeholder={mode === 'ingredient' ? "例如: 琴酒" : "例如: 內格羅尼"}
+                placeholder={
+                  mode === 'ingredient'
+                    ? '例如: 琴酒'
+                    : mode === 'food'
+                    ? '例如: 炸薯條'
+                    : '例如: 內格羅尼'
+                }
               />
             </div>
             <div className="space-y-1 col-span-2">
               <label className="text-xs font-bold text-slate-500 uppercase">
-                {mode === 'ingredient' ? '材料英文名稱' : '調酒英文名稱'}
+                {mode === 'ingredient'
+                  ? '材料英文名稱'
+                  : mode === 'food'
+                  ? '餐點英文名稱'
+                  : '調酒英文名稱'}
               </label>
               <input
                 value={item.nameEn}
                 onChange={(e) => setItem({ ...item, nameEn: e.target.value })}
                 className="w-full bg-slate-800 border border-slate-700 rounded-xl p-3 text-white focus:border-amber-500 outline-none"
-                placeholder={mode === 'ingredient' ? "e.g. Gin" : "e.g. Negroni"}
+                placeholder={
+                  mode === 'ingredient'
+                    ? 'e.g. Gin'
+                    : mode === 'food'
+                    ? 'e.g. Fries'
+                    : 'e.g. Negroni'
+                }
               />
             </div>
 
