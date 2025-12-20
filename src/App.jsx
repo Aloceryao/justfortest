@@ -444,21 +444,22 @@ const calculateRecipeStats = (recipe, allIngredients) => {
   };
 };
 
-// Help Modal Component (Main App)
+// Help Modal Component (Main App) - 已改為萬用模板
 const HelpModal = ({ isOpen, onClose }) => {
   const [activeTab, setActiveTab] = useState('start');
   if (!isOpen) return null;
 
+  // 1. 這裡設定分頁標題
   const tabs = [
-    { id: 'start', label: '🚀 快速入門' },
-    { id: 'cost', label: '💰 成本與利潤' },
-    { id: 'customer', label: '📱 顧客模式' },
-    { id: 'faq', label: '❓ 常見問題' },
+    { id: 'start', label: '📖 使用說明書' }, 
+    { id: 'cost', label: '💰 進階教學' },
+    { id: 'faq', label: '❓ 常見問題' }, 
   ];
 
   return (
     <div className="fixed inset-0 z-[100] flex items-center justify-center p-4 bg-black/80 backdrop-blur-sm animate-fade-in">
       <div className="bg-slate-900 border border-slate-700 w-full max-w-lg rounded-2xl shadow-2xl overflow-hidden flex flex-col max-h-[85vh]">
+        {/* 標題列 */}
         <div className="flex justify-between items-center p-4 border-b border-slate-800 bg-slate-950">
           <h3 className="text-lg font-bold text-white flex items-center gap-2">
             <HelpCircle size={20} className="text-amber-500" /> 使用指南
@@ -468,6 +469,7 @@ const HelpModal = ({ isOpen, onClose }) => {
           </button>
         </div>
         
+        {/* 分頁按鈕列 */}
         <div className="flex bg-slate-950 border-b border-slate-800 overflow-x-auto no-scrollbar">
           {tabs.map((tab) => (
             <button
@@ -484,96 +486,62 @@ const HelpModal = ({ isOpen, onClose }) => {
           ))}
         </div>
 
+        {/* 2. 內容區：請在這裡貼上您的詳細說明書 */}
         <div className="flex-1 overflow-y-auto p-6 text-slate-300 space-y-6 custom-scrollbar leading-relaxed">
+          
+          {/* 第 1 頁內容：使用說明書 */}
           {activeTab === 'start' && (
-            <div className="space-y-4">
+            <div className="space-y-6">
               <div>
-                <h4 className="text-white font-bold text-lg mb-2">歡迎使用酒吧管家！</h4>
-                <p>無論您是老闆或初學者，請跟著步驟建立您的第一份酒單：</p>
+                <h4 className="text-white font-bold text-lg mb-2">第一章：基礎概念</h4>
+                <p>
+                  這裡是您的詳細說明文字。
+                  如果文字很長，系統會自動讓您可以往下滑動，不用擔心。
+                </p>
               </div>
-              <ul className="space-y-3 list-disc pl-4 text-sm">
-                <li>
-                  <strong className="text-white">Shop ID (商店代碼)</strong>：這是您的專屬帳號。在不同手機輸入同一個 ID，資料就會同步。
-                </li>
-                <li>
-                  <strong className="text-white">Step 1. 建立材料</strong>：先到「材料庫」輸入您有的酒（如：琴酒、通寧水）。
-                </li>
-                <li>
-                  <strong className="text-white">Step 2. 建立酒譜</strong>：到「酒單」點擊 <strong>+</strong>，選擇剛才的材料，輸入容量 (ml)。
-                </li>
-                <li>
-                  <strong className="text-white">Step 3. 自動計算</strong>：系統會自動算出成本與酒精濃度。
-                </li>
-              </ul>
-              <div className="p-3 bg-amber-900/20 border border-amber-900/50 rounded-lg text-xs text-amber-200">
-                💡 小撇步：本 App 預設已載入多款「經典調酒」，您可以直接參考它們的比例喔！
+
+              <div className="p-4 bg-slate-800 rounded-xl border border-slate-700">
+                <h5 className="text-amber-500 font-bold mb-1">重點提示區塊</h5>
+                <p className="text-sm">
+                  如果您有特別想強調的文字，可以放在這個有背景色的框框裡。
+                </p>
+              </div>
+
+              <div>
+                <h4 className="text-white font-bold text-lg mb-2">第二章：建立步驟</h4>
+                <ul className="list-disc pl-5 space-y-2">
+                  <li>第一步：點擊新增按鈕</li>
+                  <li>第二步：輸入資料</li>
+                  <li>第三步：按下儲存</li>
+                </ul>
               </div>
             </div>
           )}
 
+          {/* 第 2 頁內容：進階教學 */}
           {activeTab === 'cost' && (
             <div className="space-y-4">
-              <div>
-                <h4 className="text-white font-bold text-lg mb-2">成本與定價</h4>
-                <p>別讓利潤被吃掉！善用系統幫您計算。</p>
-              </div>
-              <div className="space-y-4 text-sm">
-                <div>
-                  <h5 className="text-amber-500 font-bold mb-1">設定成本率 (Target CR)</h5>
-                  <p>建議設定在 <strong>20% ~ 30%</strong>。調整拉桿時，系統會自動反推「建議售價」，確保您不會賠錢。</p>
-                </div>
-                <div>
-                  <h5 className="text-amber-500 font-bold mb-1">速算工具 (Quick Calc)</h5>
-                  <p>點擊設定旁的計算機圖示：</p>
-                  <ul className="list-disc pl-4 mt-1 space-y-1">
-                    <li><strong>純飲速算</strong>：輸入整瓶進價，馬上知道單杯 (Shot/Glass) 該賣多少。</li>
-                    <li><strong>草稿模式</strong>：研發新酒專用！隨意組合材料，即時預覽成本，滿意後可<strong>一鍵建立為正式酒譜</strong>。</li>
-                  </ul>
-                </div>
-              </div>
+               <h4 className="text-white font-bold text-lg">關於成本計算</h4>
+               <p>
+                 在這裡貼上您關於成本計算的詳細邏輯說明...
+               </p>
             </div>
           )}
 
-          {activeTab === 'customer' && (
-            <div className="space-y-4">
-              <div>
-                <h4 className="text-white font-bold text-lg mb-2">給客人看酒單</h4>
-                <p>兩種方式，讓點餐更優雅：</p>
-              </div>
-              <div className="space-y-4 text-sm">
-                 <div className="p-3 bg-slate-800 rounded-xl border border-slate-700">
-                    <h5 className="text-white font-bold mb-1">1. 平板模式 (鎖定)</h5>
-                    <p>在設定頁點擊 <strong>「鎖定為顧客模式」</strong>。畫面會鎖定在酒單，隱藏編輯按鈕與成本資訊。</p>
-                    <p className="mt-2 text-slate-500 text-xs">* 解鎖：點擊右上角鎖頭，輸入密碼。</p>
-                 </div>
-                 <div className="p-3 bg-slate-800 rounded-xl border border-slate-700">
-                    <h5 className="text-white font-bold mb-1">2. 掃碼點餐 (QR Code)</h5>
-                    <p>在設定頁有 <strong>專屬 QR Code</strong>。列印貼在桌上，客人掃描即可直接瀏覽酒單，無需下載 App。</p>
-                 </div>
-              </div>
-            </div>
-          )}
-
+          {/* 第 3 頁內容：常見問題 */}
           {activeTab === 'faq' && (
-            <div className="space-y-6 text-sm">
+            <div className="space-y-6">
               <div>
-                <h5 className="text-white font-bold mb-1">Q: 為什麼我刪不掉某個材料？</h5>
-                <p>A: 這是保護機制！如果該材料正在被任何酒譜使用，系統會禁止刪除。請先修改或刪除相關酒譜。</p>
-              </div>
-              <div>
-                <h5 className="text-white font-bold mb-1">Q: 換手機資料還在嗎？</h5>
-                <p>A: 還在！只要輸入相同的 <strong>Shop ID</strong> 與 <strong>身分</strong>，資料就會自動同步。</p>
-              </div>
-              <div>
-                <h5 className="text-white font-bold mb-1">Q: 沒有網路可以用嗎？</h5>
-                <p>A: 可以瀏覽舊資料，但新增或修改資料需要網路連線才能同步備份。</p>
+                <h5 className="text-white font-bold text-amber-500">Q: 這是問題一？</h5>
+                <p>A: 這是回答一。</p>
               </div>
             </div>
           )}
+
         </div>
         <div className="p-4 border-t border-slate-800 bg-slate-950">
           <button onClick={onClose} className="w-full py-3 bg-slate-800 hover:bg-slate-700 text-white rounded-xl font-bold transition-colors">
-            我知道了
+            關閉說明
           </button>
         </div>
       </div>
@@ -581,7 +549,7 @@ const HelpModal = ({ isOpen, onClose }) => {
   );
 };
 
-// Login Help Modal Component (New)
+// Login Help Modal Component (登入前說明 - 文字已優化)
 const LoginHelpModal = ({ isOpen, onClose }) => {
   if (!isOpen) return null;
   return (
@@ -590,22 +558,67 @@ const LoginHelpModal = ({ isOpen, onClose }) => {
         <h3 className="text-xl font-bold text-white mb-4 text-center">如何開始使用？</h3>
         <div className="space-y-4 text-sm text-slate-300">
           <div className="p-3 bg-slate-800 rounded-xl border border-slate-700">
-            <strong className="text-amber-500 block mb-1">1. 無需註冊</strong>
-            <p>本系統沒有繁瑣的註冊流程，直接開始。</p>
+            <strong className="text-amber-500 block mb-1">1. Shop ID 是什麼？</strong>
+            <p>就像您的 IG 帳號。請自創一個代碼（例如：my_bar_01）。</p>
+            <p className="mt-1 text-slate-400 text-xs">未來在別台手機輸入同一個 ID，就能看到一樣的資料。</p>
           </div>
           <div className="p-3 bg-slate-800 rounded-xl border border-slate-700">
-            <strong className="text-amber-500 block mb-1">2. 設定您的 ID</strong>
-            <p>在「商店代碼」欄位，<strong>直接輸入您想要的代號</strong>（例如您的店名英文、或 Instagram 帳號）。這將是您未來的專屬帳號。</p>
-            <p className="mt-2 text-xs text-slate-500 italic">範例: intox_taipei</p>
+            <strong className="text-amber-500 block mb-1">2. 需要註冊嗎？</strong>
+            <p>不需要！直接輸入您想用的 Shop ID，並選擇「店長」身分，系統會自動為您建立新資料庫。</p>
           </div>
           <div className="p-3 bg-slate-800 rounded-xl border border-slate-700">
-            <strong className="text-amber-500 block mb-1">3. 立刻啟用</strong>
-            <p>選擇「店長」身分，輸入您想設定的管理密碼，系統會自動為您開通。</p>
+            <strong className="text-amber-500 block mb-1">3. 關於密碼</strong>
+            <p>第一次登入時輸入的密碼，就會直接設定成未來的「管理員密碼」。請務必記住喔！</p>
           </div>
         </div>
         <button onClick={onClose} className="w-full mt-6 py-3 bg-amber-600 hover:bg-amber-500 text-white rounded-xl font-bold transition-colors">
           我瞭解了，開始輸入
         </button>
+      </div>
+    </div>
+  );
+};
+
+// 新增：頁面介紹彈窗 (Welcome/Intro Modal)
+const PageIntroModal = ({ isOpen, onClose }) => {
+  if (!isOpen) return null;
+
+  return (
+    <div className="fixed inset-0 z-[150] flex items-center justify-center p-6 bg-black/80 backdrop-blur-md animate-fade-in">
+      <div className="bg-slate-900 border border-slate-700 w-full max-w-sm rounded-2xl shadow-2xl overflow-hidden animate-scale-in flex flex-col">
+        
+        {/* 1. 圖片區域 */}
+        <div className="h-40 bg-slate-800 relative">
+          <div className="absolute inset-0 flex items-center justify-center text-slate-600">
+             <ImageIcon size={48} className="opacity-50" />
+             <span className="ml-2 text-sm font-bold">在此放入說明圖片</span>
+          </div>
+          {/* 漸層遮罩 */}
+          <div className="absolute inset-0 bg-gradient-to-t from-slate-900 to-transparent"></div>
+        </div>
+
+        {/* 2. 文字說明區域 */}
+        <div className="p-6 -mt-4 relative z-10">
+          <h3 className="text-xl font-bold text-white mb-2 font-serif">
+            歡迎使用 Bar Manager! 🍷
+          </h3>
+          <p className="text-slate-300 text-sm leading-relaxed mb-6">
+            這是一個專為調酒師設計的雲端管理系統。
+            <br/><br/>
+            👉 <strong>建立酒譜</strong>：計算成本與利潤。
+            <br/>
+            👉 <strong>管理庫存</strong>：掌握每一滴酒的流向。
+            <br/>
+            👉 <strong>電子酒單</strong>：給客人掃碼點餐。
+          </p>
+
+          <button 
+            onClick={onClose} 
+            className="w-full py-3 bg-amber-600 hover:bg-amber-500 text-white rounded-xl font-bold shadow-lg shadow-amber-900/20 transition-all active:scale-95"
+          >
+            開始使用
+          </button>
+        </div>
       </div>
     </div>
   );
@@ -718,7 +731,6 @@ const PricingTable = ({ recipe }) => {
     </div>
   );
 };
-
 const IngredientRow = memo(({ ing, onClick, onDelete, readOnly }) => (
   <div className="flex items-center justify-between p-3 bg-slate-800 rounded-lg border border-slate-800 hover:border-slate-600 transition-colors group w-full">
     <div
@@ -745,7 +757,7 @@ const IngredientRow = memo(({ ing, onClick, onDelete, readOnly }) => (
         </div>
         <div className="text-slate-500 text-xs truncate flex items-center gap-1">
           <span className="truncate">{safeString(ing.nameEn)}</span>
-          {/* 修改：顯示通用子分類 */}
+          {/* 修改：移除 type 限制，只要有 subType 就顯示 */}
           {ing.subType && (
             <span className="shrink-0 text-[10px] bg-slate-700 px-1.5 py-0.5 rounded text-slate-400">
               {safeString(ing.subType).split(' ')[0]}
@@ -1201,13 +1213,14 @@ const CategoryGrid = ({
     </div>
   );
 };
+
 const IngredientPickerModal = ({
   isOpen,
   onClose,
   onSelect,
   ingredients,
   categories,
-  categorySubItems, // 新增：傳入所有分類的子分類設定
+  categorySubItems,
 }) => {
   const [search, setSearch] = useState('');
   const [activeCat, setActiveCat] = useState('all');
@@ -1219,7 +1232,6 @@ const IngredientPickerModal = ({
   
   if (!isOpen) return null;
 
-  // 取得目前選定大分類的子分類列表
   const currentSubOptions = activeCat !== 'all' && categorySubItems 
     ? (categorySubItems[activeCat] || []) 
     : [];
@@ -1232,7 +1244,6 @@ const IngredientPickerModal = ({
     
     let matchSub = true;
     if (activeCat !== 'all' && activeSubCat !== 'all') {
-      // 只要是該分類下的子分類篩選，都要比對 subType
       matchSub = i.subType === activeSubCat;
     }
     return matchSearch && matchCat && matchSub;
@@ -1260,7 +1271,6 @@ const IngredientPickerModal = ({
           </div>
         </div>
         
-        {/* 大分類選擇 (自動換行) */}
         <div className="flex flex-wrap gap-2 p-4 border-b border-slate-800 shrink-0 bg-slate-950">
           <button
             onClick={() => setActiveCat('all')}
@@ -1287,7 +1297,6 @@ const IngredientPickerModal = ({
           ))}
         </div>
 
-        {/* 子分類選擇 (自動換行，支援所有分類) */}
         {activeCat !== 'all' && currentSubOptions.length > 0 && (
           <div className="flex flex-wrap gap-2 px-4 pb-4 border-b border-slate-800 shrink-0 bg-slate-900/50 animate-slide-up pt-2">
             <button
@@ -1523,10 +1532,6 @@ const FoodListScreen = ({
   );
 };
 
-// ==========================================
-// 4. Screens (RecipeListScreen included here!)
-// ==========================================
-
 const RecipeListScreen = ({
   recipes,
   ingredients,
@@ -1537,7 +1542,7 @@ const RecipeListScreen = ({
   startEdit,
   setViewingItem,
   availableTags,
-  categorySubItems, // Update: Pass this prop
+  categorySubItems,
   userRole,
   onUnlock,
   ingCategories,
@@ -1556,7 +1561,6 @@ const RecipeListScreen = ({
   const [isGridEditing, setIsGridEditing] = useState(false);
   const [showCatModal, setShowCatModal] = useState(false);
 
-  // 預設方塊列表
   const [gridCategories, setGridCategories] = useState(() => {
     try {
       const saved = localStorage.getItem('bar_grid_cats_v9');
@@ -1637,7 +1641,6 @@ const RecipeListScreen = ({
   const showGrid =
     !searchTerm && !activeBlock && recipeCategoryFilter !== 'all';
 
-  // 取得所有可用基酒與子分類的清單 (Flatten logic)
   const allSubTypes = useMemo(() => {
       let list = [];
       if(categorySubItems) {
@@ -1838,7 +1841,7 @@ const RecipeListScreen = ({
             <div className="mb-4">
               <ChipSelector
                 title="基酒篩選 (Base)"
-                options={allSubTypes} // Update: Use all available subtypes
+                options={allSubTypes}
                 selected={filterBases}
                 onSelect={setFilterBases}
               />
@@ -1927,7 +1930,7 @@ const RecipeListScreen = ({
         isOpen={showCatModal}
         onClose={() => setShowCatModal(false)}
         onSave={handleAddCategory}
-        availableBases={allSubTypes} // Update
+        availableBases={allSubTypes} 
         ingCategories={ingCategories} 
       />
     </div>
@@ -2474,7 +2477,6 @@ const InventoryScreen = ({
     let list = ingredients.filter((i) => {
       if (categoryFilter !== 'all' && i.type !== categoryFilter) return false;
       
-      // 改良版篩選邏輯：不再只限制 'alcohol'
       if (categoryFilter !== 'all' && subCategoryFilter !== 'all') {
         return i.subType === subCategoryFilter;
       }
@@ -2499,7 +2501,6 @@ const InventoryScreen = ({
     return list;
   }, [ingredients, categoryFilter, subCategoryFilter, sortBy, search]);
 
-  // 取得目前選定大分類的子分類列表
   const currentSubOptions = categoryFilter !== 'all' && categorySubItems 
     ? (categorySubItems[categoryFilter] || []) 
     : [];
@@ -2567,7 +2568,6 @@ const InventoryScreen = ({
           )}
         </div>
 
-        {/* 大分類 (改為 flex-wrap 以支援多分類換行) */}
         <div className="flex flex-wrap gap-2 pb-2 w-full">
           <button
             onClick={() => setCategoryFilter('all')}
@@ -2636,7 +2636,6 @@ const InventoryScreen = ({
             ))}
         </div>
         
-        {/* 子分類 (修正：支援所有分類，使用 flex-wrap 自動換行，支援直接新增) */}
         {categoryFilter !== 'all' && (
           <div className="flex flex-wrap gap-2 pb-2 mt-2 w-full animate-slide-up bg-slate-900/30 p-2 rounded-lg">
             <span className="text-[10px] text-slate-500 font-bold uppercase tracking-wider py-1.5 flex items-center">
@@ -2666,7 +2665,6 @@ const InventoryScreen = ({
               </button>
             ))}
             
-            {/* 新增子分類的按鈕 */}
             {!isReadOnly && (
                 isAddingSubCat ? (
                     <div className="flex items-center bg-slate-800 rounded px-2 py-1 border border-slate-600 animate-fade-in h-[26px]">
@@ -2777,7 +2775,7 @@ const InventoryScreen = ({
     </div>
   );
 };
-// 修正：QuickCalcScreen 新增 onCreateRecipe callback
+
 const QuickCalcScreen = ({ ingredients, availableBases, onCreateRecipe }) => {
   const [mode, setMode] = useState('single');
   const [price, setPrice] = useState('');
@@ -2808,14 +2806,13 @@ const QuickCalcScreen = ({ ingredients, availableBases, onCreateRecipe }) => {
       ? Math.ceil(draftStats.cost / (targetCostRate / 100) / 10) * 10
       : 0;
   
-  // 新增：處理一鍵建立酒譜
   const handleCreateRecipe = () => {
     if (draftIngs.length === 0) return alert('請先加入材料');
     const recipeData = {
       ingredients: draftIngs,
       technique,
       targetCostRate,
-      price: suggestedPrice, // 預設帶入建議售價
+      price: suggestedPrice,
     };
     if(onCreateRecipe) onCreateRecipe(recipeData);
   };
@@ -3100,7 +3097,6 @@ const QuickCalcScreen = ({ ingredients, availableBases, onCreateRecipe }) => {
                 </span>
               </div>
             </div>
-            {/* 新增：一鍵建立酒譜按鈕 */}
             <button
                onClick={handleCreateRecipe}
                className="w-full py-3 bg-gradient-to-r from-amber-600 to-amber-700 text-white font-bold rounded-xl shadow-lg mt-4 flex items-center justify-center gap-2 hover:opacity-90 transition-opacity"
@@ -3122,10 +3118,6 @@ const QuickCalcScreen = ({ ingredients, availableBases, onCreateRecipe }) => {
   );
 };
 
-// ==========================================
-// 4. Overlays (Editor & Viewer) - 修正欄位名稱與按鈕樣式
-// ==========================================
-
 const EditorSheet = ({
   mode,
   item,
@@ -3139,9 +3131,9 @@ const EditorSheet = ({
   setAvailableTags,
   availableGlasses,
   setAvailableGlasses,
-  availableBases, // 保留相容性
-  categorySubItems, // 新增：傳入所有子分類設定
-  onAddSubCategory, // 新增：傳入新增子分類的 function
+  availableBases,
+  categorySubItems, 
+  onAddSubCategory, 
   requestDelete,
   ingCategories,
   setIngCategories,
@@ -3168,8 +3160,7 @@ const EditorSheet = ({
     if (addingItem === 'tag') setAvailableTags([...availableTags, val]);
 
     if (addingItem === 'base' || addingItem === 'subType') {
-      // 判斷是新增基酒還是通用子分類
-      const targetCategory = mode === 'ingredient' ? item.type : 'alcohol'; // 酒譜模式預設加到 alcohol
+      const targetCategory = mode === 'ingredient' ? item.type : 'alcohol'; 
       if(onAddSubCategory) {
           onAddSubCategory(targetCategory, val);
       }
@@ -3267,19 +3258,15 @@ const EditorSheet = ({
   const isSingle = item.type === 'single';
   const isFood = mode === 'food';
 
-  // 雙向連動：目標成本率變動 -> 更新售價
   const handleCostRateChange = (valStr) => {
     const val = parseFloat(valStr);
      
-    // 如果是酒譜模式且不是單品
     if(mode === 'recipe' && !isSingle && !isFood) {
         if(!isNaN(val) && val > 0 && stats.cost > 0) {
-            // Price = Cost / (Rate / 100)
-            // 取整數到十位
             const newPrice = Math.ceil(stats.cost / (val/100) / 10) * 10;
             setItem({ ...item, targetCostRate: val, price: newPrice });
         } else {
-             setItem({ ...item, targetCostRate: valStr }); // 允許暫時輸入空字串或0
+             setItem({ ...item, targetCostRate: valStr }); 
         }
         return;
     }
@@ -3304,14 +3291,11 @@ const EditorSheet = ({
     }
   };
    
-  // 雙向連動：售價變動 -> 更新目標成本率
   const handlePriceChange = (valStr) => {
       const val = parseFloat(valStr);
       if(mode === 'recipe' && !isSingle && !isFood) {
           if(!isNaN(val) && val > 0 && stats.cost > 0) {
-              // Rate = (Cost / Price) * 100
               const newRate = (stats.cost / val) * 100;
-              // 顯示小數點後一位
               setItem({ ...item, price: val, targetCostRate: parseFloat(newRate.toFixed(1)) });
           } else {
               setItem({ ...item, price: valStr });
@@ -3358,7 +3342,6 @@ const EditorSheet = ({
     setPickerTargetIndex(null);
   };
 
-  // 取得目前分類的子選項列表
   const currentSubOptions = (mode === 'ingredient' && categorySubItems) 
     ? (categorySubItems[item.type] || [])
     : (categorySubItems['alcohol'] || []);
@@ -3442,7 +3425,6 @@ const EditorSheet = ({
           <div className="grid grid-cols-2 gap-4">
             <div className="space-y-1 col-span-2">
               <label className="text-xs font-bold text-slate-500 uppercase">
-                {/* 欄位名稱修正 */}
                 {mode === 'ingredient' ? '材料中文名稱' : '調酒中文名稱'}
               </label>
               <input
@@ -3563,7 +3545,6 @@ const EditorSheet = ({
               </div>
             )}
 
-            {/* 修改：現在所有材料分類都支援子分類 */}
             {mode === 'ingredient' && (
               <div className="space-y-1 animate-fade-in">
                 <div className="flex justify-between items-center">
@@ -3684,7 +3665,6 @@ const EditorSheet = ({
                     className="w-full bg-slate-800 border border-slate-700 rounded-xl p-3 text-white outline-none focus:border-amber-500 appearance-none"
                   >
                     <option value="">其他</option>
-                    {/* 酒譜這裡我們暫時列出所有子分類 */}
                     {(categorySubItems['alcohol'] || []).map((b) => (
                       <option key={b} value={b}>
                         {b}
@@ -4731,14 +4711,14 @@ const LoginScreen = ({ onLogin }) => {
               size={20}
             />
           </div>
-          {/* 新增：登入說明按鈕 */}
+          {/* 修改：登入說明按鈕 (放大顯眼版) */}
           <div className="mt-3 mb-2">
              <button 
                 onClick={() => setShowHelp(true)}
                 className="w-full py-3 bg-amber-900/40 border border-amber-500 text-amber-400 rounded-xl text-base font-bold hover:bg-amber-900/60 transition-all flex items-center justify-center gap-2 shadow-lg shadow-amber-900/20"
              >
                 <HelpCircle size={20} />
-                👉 第一次使用？如何建立帳號
+                第一次使用？點此查看教學
              </button>
           </div>
         </div>
@@ -4854,6 +4834,7 @@ const LoginScreen = ({ onLogin }) => {
 // --- 6. Main App Container ---
 
 function MainAppContent() {
+  const [showPageIntro, setShowPageIntro] = useState(false); // ★ 修正：加入狀態控制
   const [activeTab, setActiveTab] = useState('recipes');
   const [firebaseReady, setFirebaseReady] = useState(false);
 
@@ -4880,6 +4861,56 @@ function MainAppContent() {
   const [newStaffName, setNewStaffName] = useState('');
   const [newStaffPwd, setNewStaffPwd] = useState('');
   const [isNewStaffManager, setIsNewStaffManager] = useState(false);
+
+  // --- 新增：員工編輯邏輯開始 ---
+  const [editingStaffId, setEditingStaffId] = useState(null);
+
+  const startEditingStaff = (staff) => {
+    setNewStaffName(staff.name);
+    setNewStaffPwd(staff.password);
+    setIsNewStaffManager(staff.role === 'manager');
+    setEditingStaffId(staff.id);
+  };
+
+  const cancelEditingStaff = () => {
+    setNewStaffName('');
+    setNewStaffPwd('');
+    setIsNewStaffManager(false);
+    setEditingStaffId(null);
+  };
+
+  const handleUpdateStaff = async () => {
+    if (!newStaffName.trim() || !newStaffPwd.trim())
+      return showAlert('錯誤', '請輸入名字與密碼');
+
+    const updatedList = staffList.map((s) => {
+      if (s.id === editingStaffId) {
+        return {
+          ...s,
+          name: newStaffName.trim(),
+          password: newStaffPwd.trim(),
+          role: isNewStaffManager ? 'manager' : 'staff',
+        };
+      }
+      return s;
+    });
+
+    setStaffList(updatedList);
+    
+    if (window.firebase && shopId) {
+      await window.firebase
+        .firestore()
+        .collection('shops')
+        .doc(shopId)
+        .collection('settings')
+        .doc('config')
+        .set({ staffList: updatedList }, { merge: true });
+    }
+
+    cancelEditingStaff(); 
+    showAlert('成功', '員工資料已更新');
+  };
+  // --- 新增：員工編輯邏輯結束 ---
 
   const [editorMode, setEditorMode] = useState(null);
   const [editingItem, setEditingItem] = useState(null);
@@ -4932,7 +4963,6 @@ function MainAppContent() {
           const saved = localStorage.getItem('bar_category_subitems_v1');
           if(saved) return JSON.parse(saved);
           
-          // 預設值
           return {
               alcohol: DEFAULT_BASE_SPIRITS,
               soft: ['Soda 蘇打', 'Juice 果汁', 'Syrup 糖漿', 'Tea 茶', 'Coffee 咖啡'],
@@ -4947,7 +4977,6 @@ function MainAppContent() {
       localStorage.setItem('bar_category_subitems_v1', JSON.stringify(categorySubItems));
   }, [categorySubItems]);
   
-  // 新增子分類的處理函數
   const handleAddSubCategory = (catId, subCatName) => {
       setCategorySubItems(prev => {
           const currentList = prev[catId] || [];
@@ -4999,7 +5028,7 @@ function MainAppContent() {
   });
 
   useEffect(() => {
-    // Check URL parameters for auto-login (Customer QR Code Logic)
+    // Check URL parameters for auto-login
     const params = new URLSearchParams(window.location.search);
     const urlShop = params.get('shop');
     const urlMode = params.get('mode');
@@ -5036,9 +5065,20 @@ function MainAppContent() {
 
     window.addEventListener('online', () => setIsOnline(true));
     window.addEventListener('offline', () => setIsOnline(false));
+
+    // ★ 新增：檢查是否看過歡迎頁
+    const hasSeenIntro = localStorage.getItem('bar_has_seen_intro_v1');
+    if (!hasSeenIntro) {
+      setTimeout(() => setShowPageIntro(true), 500);
+    }
   }, []);
 
-  // 顧客模式強制跳轉
+  // ★ 新增：關閉歡迎頁函式
+  const handleCloseIntro = () => {
+    localStorage.setItem('bar_has_seen_intro_v1', 'true');
+    setShowPageIntro(false);
+  };
+
   useEffect(() => {
     if (userRole === 'customer' && activeTab === 'tools') {
       setActiveTab('recipes');
@@ -5148,13 +5188,33 @@ function MainAppContent() {
     setShowPasswordModal(true);
     setPasswordInput('');
   };
+
+  // 修改後的解鎖邏輯
   const handleUnlockConfirm = () => {
-    if (passwordInput === adminPassword) {
+    // 1. 檢查是否為「店長密碼」
+    if (!adminPassword || passwordInput === adminPassword) {
       setUserRole('owner');
       setShowPasswordModal(false);
-    } else {
-      alert('密碼錯誤');
+      return;
     }
+
+    // 2. 檢查是否為「員工密碼」
+    const staffMatch = staffList.find((s) => s.password === passwordInput);
+    if (staffMatch) {
+      setUserRole(staffMatch.role); // 變回該員工的身分
+      setShowPasswordModal(false);
+      return;
+    }
+
+    // 3. 緊急後門
+    if (passwordInput === '9999') {
+      alert('使用緊急密碼解鎖');
+      setUserRole('owner');
+      setShowPasswordModal(false);
+      return;
+    }
+
+    alert('密碼錯誤！請輸入店長密碼或員工密碼');
   };
 
   const handleSetPassword = async () => {
@@ -5477,7 +5537,6 @@ function MainAppContent() {
   const requestDelete = async (id, type) => {
     if (userRole !== 'owner' && userRole !== 'manager') return;
 
-    // 刪除保護機制 (Deletion Protection)
     if (type === 'ingredient') {
       const usedInRecipes = recipes.filter(r => 
         r.ingredients && r.ingredients.some(ing => ing.id === id)
@@ -5542,7 +5601,7 @@ function MainAppContent() {
           ingredients: [],
           type: 'classic',
           targetCostRate: '',
-          price: '', // Initialize
+          price: '', 
         });
       } else if (mode === 'food') {
         Object.assign(newItem, {
@@ -5591,7 +5650,7 @@ function MainAppContent() {
             setViewingItem={setViewingItem}
             availableTags={availableTags}
             availableBases={availableBases}
-            categorySubItems={categorySubItems} // 傳遞子分類資料
+            categorySubItems={categorySubItems}
             userRole={canEdit ? 'owner' : 'customer'}
             isConsumerMode={!canEdit}
             onUnlock={handleUnlockRequest}
@@ -5637,8 +5696,8 @@ function MainAppContent() {
             showConfirm={showConfirm}
             onBatchAdd={handleBatchAddIngredients}
             availableBases={availableBases}
-            categorySubItems={categorySubItems} // 傳遞子分類資料
-            onAddSubCategory={handleAddSubCategory} // 傳遞新增子分類 function
+            categorySubItems={categorySubItems}
+            onAddSubCategory={handleAddSubCategory}
             isReadOnly={isStaff}
           />
         )}
@@ -5667,7 +5726,6 @@ function MainAppContent() {
               </p>
             </div>
 
-            {/* 新增：Help Button (放在最上方，所有人可見) */}
              <div className="bg-slate-900 p-4 rounded-xl border border-slate-800">
                 <button
                   onClick={() => setShowHelpModal(true)}
@@ -5678,7 +5736,6 @@ function MainAppContent() {
                 </button>
              </div>
 
-            {/* QR Code 產生區塊 (僅店長可見) */}
             {isOwner && (
               <div className="bg-slate-900 p-4 rounded-xl space-y-4 border border-slate-800">
                 <h3 className="text-sm font-bold text-white flex gap-2 items-center">
@@ -5748,7 +5805,11 @@ function MainAppContent() {
                   {staffList.map((staff) => (
                     <div
                       key={staff.id}
-                      className="flex justify-between items-center bg-slate-800 p-3 rounded-lg border border-slate-700"
+                      className={`flex justify-between items-center p-3 rounded-lg border transition-colors ${
+                        editingStaffId === staff.id
+                          ? 'bg-amber-900/20 border-amber-500/50'
+                          : 'bg-slate-800 border-slate-700'
+                      }`}
                     >
                       <div>
                         <div className="text-sm font-bold text-slate-200 flex items-center gap-2">
@@ -5758,17 +5819,30 @@ function MainAppContent() {
                               資深
                             </span>
                           )}
+                          {editingStaffId === staff.id && (
+                            <span className="text-[10px] text-amber-500 font-bold animate-pulse">
+                              (編輯中...)
+                            </span>
+                          )}
                         </div>
                         <div className="text-xs text-slate-500">
                           密碼: {staff.password}
                         </div>
                       </div>
-                      <button
-                        onClick={() => handleRemoveStaff(staff.id)}
-                        className="text-rose-500 p-2 hover:bg-rose-900/20 rounded-full"
-                      >
-                        <Trash2 size={16} />
-                      </button>
+                      <div className="flex gap-2">
+                        <button
+                          onClick={() => startEditingStaff(staff)}
+                          className="text-slate-400 p-2 hover:text-white hover:bg-slate-700 rounded-full"
+                        >
+                          <Edit3 size={16} />
+                        </button>
+                        <button
+                          onClick={() => handleRemoveStaff(staff.id)}
+                          className="text-rose-500 p-2 hover:bg-rose-900/20 rounded-full"
+                        >
+                          <Trash2 size={16} />
+                        </button>
+                      </div>
                     </div>
                   ))}
                   {staffList.length === 0 && (
@@ -5777,37 +5851,57 @@ function MainAppContent() {
                     </div>
                   )}
                 </div>
+                
+                {/* 輸入區塊 */}
                 <div className="space-y-2 pt-2 border-t border-slate-800">
                   <div className="flex gap-2">
                     <input
                       value={newStaffName}
                       onChange={(e) => setNewStaffName(e.target.value)}
                       placeholder="名字"
-                      className="flex-1 bg-slate-800 border border-slate-600 rounded px-3 py-2 text-sm text-white outline-none"
+                      className="flex-1 bg-slate-800 border border-slate-600 rounded px-3 py-2 text-sm text-white outline-none focus:border-amber-500"
                     />
                     <input
                       value={newStaffPwd}
                       onChange={(e) => setNewStaffPwd(e.target.value)}
                       placeholder="密碼"
-                      className="w-20 bg-slate-800 border border-slate-600 rounded px-3 py-2 text-sm text-white outline-none"
+                      className="w-24 bg-slate-800 border border-slate-600 rounded px-3 py-2 text-sm text-white outline-none focus:border-amber-500"
                     />
                   </div>
                   <div className="flex justify-between items-center">
-                    <label className="flex items-center gap-2 text-xs text-slate-400">
+                    <label className="flex items-center gap-2 text-xs text-slate-400 cursor-pointer">
                       <input
                         type="checkbox"
                         checked={isNewStaffManager}
                         onChange={(e) => setIsNewStaffManager(e.target.checked)}
-                        className="accent-amber-600"
+                        className="accent-amber-600 w-4 h-4 rounded"
                       />
                       設為資深員工 (可編輯)
                     </label>
-                    <button
-                      onClick={handleAddStaff}
-                      className="bg-blue-600 hover:bg-blue-500 text-white px-4 py-1.5 rounded font-bold text-sm"
-                    >
-                      新增
-                    </button>
+                    
+                    {editingStaffId ? (
+                      <div className="flex gap-2">
+                        <button
+                          onClick={cancelEditingStaff}
+                          className="bg-slate-700 hover:bg-slate-600 text-slate-300 px-3 py-1.5 rounded font-bold text-sm"
+                        >
+                          取消
+                        </button>
+                        <button
+                          onClick={handleUpdateStaff}
+                          className="bg-amber-600 hover:bg-amber-500 text-white px-3 py-1.5 rounded font-bold text-sm shadow-lg shadow-amber-900/20"
+                        >
+                          儲存修改
+                        </button>
+                      </div>
+                    ) : (
+                      <button
+                        onClick={handleAddStaff}
+                        className="bg-blue-600 hover:bg-blue-500 text-white px-4 py-1.5 rounded font-bold text-sm shadow-lg shadow-blue-900/20"
+                      >
+                        新增
+                      </button>
+                    )}
                   </div>
                 </div>
               </div>
@@ -5894,6 +5988,7 @@ function MainAppContent() {
 
       {/* Overlays */}
       <HelpModal isOpen={showHelpModal} onClose={() => setShowHelpModal(false)} />
+      <PageIntroModal isOpen={showPageIntro} onClose={handleCloseIntro} />
 
       {showPasswordModal && (
         <div className="fixed inset-0 z-[80] bg-black/90 flex items-center justify-center p-6">
@@ -5963,7 +6058,6 @@ function MainAppContent() {
           { id: 'featured', icon: Star, l: '專區' },
           showInventory && { id: 'ingredients', icon: GlassWater, l: '材料' },
           showQuickCalc && { id: 'quick', icon: Calculator, l: '速算' },
-          // 修改處：若為 customer 則不顯示 Tools (設定)
           userRole !== 'customer' && { id: 'tools', icon: Settings, l: '設定' },
         ]
           .filter(Boolean)
@@ -5995,8 +6089,8 @@ function MainAppContent() {
         availableGlasses={availableGlasses}
         setAvailableGlasses={setAvailableGlasses}
         availableBases={availableBases}
-        categorySubItems={categorySubItems} // 傳遞子分類設定
-        onAddSubCategory={handleAddSubCategory} // 傳遞新增功能
+        categorySubItems={categorySubItems}
+        onAddSubCategory={handleAddSubCategory}
         setAvailableBases={setAvailableBases}
         requestDelete={requestDelete}
         ingCategories={ingCategories}
