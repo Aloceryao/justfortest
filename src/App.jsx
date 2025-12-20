@@ -109,7 +109,7 @@ const loadFirebase = () => {
   });
 };
 
-const compressImage = (base64Str, maxWidth = 800, quality = 0.6) => {
+const compressImage = (base64Str, maxWidth = 1200, quality = 0.85) => {
   return new Promise((resolve) => {
     const img = new Image();
     img.src = base64Str;
@@ -375,7 +375,7 @@ const safeString = (str) => (str || '').toString();
 // ==========================================
 // ★ 版本號設定 (修改這裡會同步更新登入頁與設定頁)
 // ==========================================
-const APP_VERSION = 'v15.0 (融水顯示版)';
+const APP_VERSION = 'v15.1 (照片加大版)';
 const safeNumber = (num) => {
   const n = parseFloat(num);
   return isNaN(n) ? 0 : n;
@@ -3232,8 +3232,11 @@ const EditorSheet = ({
         const canvas = document.createElement('canvas');
         let width = img.width;
         let height = img.height;
-        const MAX_WIDTH = 300;
-        const MAX_HEIGHT = 300;
+        
+        // ★★★ 修改重點：將 300 提升至 1200，讓照片保持高畫質 ★★★
+        const MAX_WIDTH = 1200; 
+        const MAX_HEIGHT = 1200;
+        
         if (width > height) {
           if (width > MAX_WIDTH) {
             height *= MAX_WIDTH / width;
@@ -3249,7 +3252,9 @@ const EditorSheet = ({
         canvas.height = height;
         const ctx = canvas.getContext('2d');
         ctx.drawImage(img, 0, 0, width, height);
-        const dataUrl = canvas.toDataURL('image/jpeg', 0.5);
+        
+        // ★★★ 修改重點：將 0.5 提升至 0.85 ★★★
+        const dataUrl = canvas.toDataURL('image/jpeg', 0.85);
         setItem({ ...item, image: dataUrl });
       };
       img.src = event.target.result;
@@ -4376,7 +4381,7 @@ const ViewerOverlay = ({
       />
       <div className="relative w-full md:w-[600px] bg-slate-950 h-full shadow-2xl flex flex-col animate-slide-up overflow-hidden">
         {/* 上方圖片區 */}
-        <div className="relative h-72 shrink-0">
+        <div className="relative h-[500px] shrink-0">
           <AsyncImage
             imageId={item.image}
             alt={item.nameZh}
