@@ -372,15 +372,19 @@ const CategoryIcon = ({ iconType, className }) => {
 const generateId = () =>
   Date.now().toString(36) + Math.random().toString(36).substr(2);
 const safeString = (str) => (str || '').toString();
+// ==========================================
+// ★ 版本號設定 (修改這裡會同步更新登入頁與設定頁)
+// ==========================================
+const APP_VERSION = 'v15.0 (融水顯示版)';
 const safeNumber = (num) => {
   const n = parseFloat(num);
   return isNaN(n) ? 0 : n;
 };
 
-// 強化版計算邏輯
+// 強化版計算邏輯 (含 Raw ABV 與 Final ABV 計算)
 const calculateRecipeStats = (recipe, allIngredients) => {
   if (!recipe)
-    return { cost: 0, costRate: 0, abv: 0, volume: 0, price: 0, finalAbv: 0 };
+    return { cost: 0, costRate: 0, abv: 0, volume: 0, price: 0, finalAbv: 0, rawAbv: 0, dilution: 0 };
 
   if (recipe.type === 'food') {
     return {
@@ -388,10 +392,14 @@ const calculateRecipeStats = (recipe, allIngredients) => {
       costRate: 0,
       abv: 0,
       volume: 0,
+      dilution: 0,
+      rawAbv: 0,
+      finalAbv: 0,
       price: safeNumber(recipe.price),
     };
   }
 
+  // 單品/純飲邏輯
   if (recipe.type === 'single' || recipe.isIngredient) {
     const capacity =
       safeNumber(recipe.bottleCapacity) || safeNumber(recipe.volume) || 700;
@@ -400,18 +408,22 @@ const calculateRecipeStats = (recipe, allIngredients) => {
       safeNumber(recipe.priceGlass) || safeNumber(recipe.priceShot) || 0;
     const costRate =
       price > 0 && capacity > 0 ? (((cost / capacity) * 50) / price) * 100 : 0;
+    const abv = safeNumber(recipe.abv) || 40;
     return {
       cost,
       costRate,
-      finalAbv: safeNumber(recipe.abv) || 40,
+      rawAbv: abv,    // 單品原酒
+      finalAbv: abv,  // 單品無融水，所以一樣
       volume: capacity,
+      dilution: 0,
       price,
     };
   }
 
+  // 雞尾酒計算邏輯
   let totalCost = 0,
     totalAlcoholVol = 0,
-    totalVolume = 0;
+    rawVolume = 0; // 原始材料總量 (還沒加水)
 
   if (recipe.ingredients && Array.isArray(recipe.ingredients)) {
     recipe.ingredients.forEach((item) => {
@@ -422,13 +434,32 @@ const calculateRecipeStats = (recipe, allIngredients) => {
         const pricePerMl = vol > 0 ? safeNumber(ing.price) / vol : 0;
         totalCost += pricePerMl * amount;
         totalAlcoholVol += amount * (safeNumber(ing.abv) / 100);
-        totalVolume += amount;
+        rawVolume += amount;
       }
     });
   }
   if (recipe.garnish) totalCost += 5;
 
+  // --- 融水計算邏輯 ---
+  // Shake: +25% | Stir: +12% | Build/Roll: +5% | Blend: +30%
+  let dilutionRate = 0;
+  const tech = recipe.technique || 'Build';
+  
+  if (tech === 'Shake') dilutionRate = 0.25;
+  else if (tech === 'Stir') dilutionRate = 0.12;
+  else if (tech === 'Blend') dilutionRate = 0.30;
+  else if (tech === 'Roll') dilutionRate = 0.10;
+  else dilutionRate = 0.05; // Build 或其他預設微量融水
+
+  const dilution = Math.round(rawVolume * dilutionRate);
+  const totalVolume = rawVolume + dilution; // 最終總液量
+
+  // 1. 計算原液濃度 (Raw ABV) - 調製前
+  const rawAbv = rawVolume > 0 ? (totalAlcoholVol / rawVolume) * 100 : 0;
+  
+  // 2. 計算成品濃度 (Final ABV) - 含融水
   const finalAbv = totalVolume > 0 ? (totalAlcoholVol / totalVolume) * 100 : 0;
+
   const price =
     recipe.price && recipe.price > 0
       ? recipe.price
@@ -438,8 +469,10 @@ const calculateRecipeStats = (recipe, allIngredients) => {
   return {
     cost: Math.round(totalCost),
     costRate,
-    finalAbv,
+    rawAbv,   // 回傳 原液濃度
+    finalAbv, // 回傳 成品濃度
     volume: Math.round(totalVolume),
+    dilution, // 回傳 融水量
     price,
   };
 };
@@ -3082,6 +3115,9 @@ const QuickCalcScreen = ({ ingredients, availableBases, onCreateRecipe }) => {
                   <div className="text-2xl font-mono text-blue-400 font-bold">
                     {draftStats.volume}ml
                   </div>
+                  <div className="text-[10px] text-blue-500/60 font-mono">
+                    (含水 {draftStats.dilution}ml)
+                  </div>
                 </div>
               </div>
               <div className="pt-4 border-t border-slate-700 flex justify-between items-center">
@@ -4056,14 +4092,20 @@ const EditorSheet = ({
                       }`}
                     >
                       {stats.costRate.toFixed(0)}%
-                    </div>
+                      </div>
                   </div>
+                  
+                  {/* 這是原本顯示總液量的區塊，已加入融水顯示 */}
                   <div>
                     <div className="text-xs text-slate-500">總液量</div>
                     <div className="text-xl font-mono text-blue-400 font-bold">
                       {stats.volume}ml
                     </div>
+                    <div className="text-[10px] text-slate-500 font-mono">
+                       💧 +{stats.dilution}ml
+                    </div>
                   </div>
+
                   <div className="space-y-1">
                     <label className="text-xs font-bold text-slate-500 uppercase block">
                       售價 (雙向連動)
@@ -4319,7 +4361,10 @@ const ViewerOverlay = ({
   isConsumerMode,
 }) => {
   if (!item) return null;
+  
+  // 計算數值 (包含原液與融水)
   const stats = calculateRecipeStats(item, ingredients);
+  
   const isSingle = item.type === 'single' || item.isIngredient;
   const isFood = item.type === 'food';
 
@@ -4330,6 +4375,7 @@ const ViewerOverlay = ({
         onClick={onClose}
       />
       <div className="relative w-full md:w-[600px] bg-slate-950 h-full shadow-2xl flex flex-col animate-slide-up overflow-hidden">
+        {/* 上方圖片區 */}
         <div className="relative h-72 shrink-0">
           <AsyncImage
             imageId={item.image}
@@ -4379,23 +4425,38 @@ const ViewerOverlay = ({
           </div>
         </div>
 
+        {/* 下方內容區 */}
         <div className="flex-1 overflow-y-auto custom-scrollbar bg-slate-950">
           <div className="p-6 space-y-8 pb-8">
+            
+            {/* ★★★ 數據顯示區塊 (橫向排列版：原液｜含水) ★★★ */}
             {!isSingle && (
               <div className="flex justify-between items-center bg-slate-900/50 p-4 rounded-2xl border border-slate-800/50 backdrop-blur-sm">
                 {!isFood && (
                   <div className="text-center">
                     <div className="text-xs text-slate-500 uppercase tracking-wider mb-1">
-                      酒精濃度
+                      酒精濃度 (原液｜含水)
                     </div>
-                    <div className="text-xl font-bold text-amber-500">
-                      {stats.finalAbv.toFixed(1)}%
+                    {/* 修改重點：橫向排列，字體顏色大小一致 */}
+                    <div className="text-lg font-bold text-amber-500 flex items-center justify-center gap-1">
+                      {stats.dilution > 0 ? (
+                        <>
+                          <span>{stats.rawAbv.toFixed(1)}%</span>
+                          <span className="text-slate-600 mx-1">|</span>
+                          <span>{stats.finalAbv.toFixed(1)}%</span>
+                          <span className="text-[10px] opacity-80 self-end mb-1">(含水)</span>
+                        </>
+                      ) : (
+                        <span>{stats.finalAbv.toFixed(1)}%</span>
+                      )}
                     </div>
                   </div>
                 )}
+                
+                {/* 分隔線與成本率 (老闆/員工模式才顯示) */}
                 {!isConsumerMode && !isFood && (
                   <>
-                    <div className="w-px h-8 bg-slate-800"></div>
+                    <div className="w-px h-8 bg-slate-800 mx-2"></div>
                     <div className="text-center">
                       <div className="text-xs text-slate-500 uppercase tracking-wider mb-1">
                         成本率
@@ -4412,9 +4473,12 @@ const ViewerOverlay = ({
                     </div>
                   </>
                 )}
+                
                 {(isFood || !isConsumerMode) && (
-                  <div className="w-px h-8 bg-slate-800"></div>
+                  <div className="w-px h-8 bg-slate-800 mx-2"></div>
                 )}
+                
+                {/* 售價 */}
                 <div className="text-center flex-1">
                   <div className="text-xs text-slate-500 uppercase tracking-wider mb-1">
                     售價
@@ -4426,8 +4490,10 @@ const ViewerOverlay = ({
               </div>
             )}
 
+            {/* 單品價格表 */}
             {isSingle && !isConsumerMode && <PricingTable recipe={item} />}
 
+            {/* 單品價格表 (顧客模式) */}
             {isSingle && isConsumerMode && (
               <div className="grid grid-cols-3 gap-2 w-full text-center bg-slate-900/50 p-4 rounded-2xl border border-slate-800/50">
                 {item.priceShot && (
@@ -4459,6 +4525,7 @@ const ViewerOverlay = ({
               </div>
             )}
 
+            {/* 材料列表區塊 */}
             {!isSingle && !isFood && (
               <div>
                 <h3 className="text-sm font-bold text-slate-500 uppercase tracking-wider mb-3 flex items-center gap-2">
@@ -4497,10 +4564,22 @@ const ViewerOverlay = ({
                       </span>
                     </div>
                   )}
+                  {/* 融水顯示 (列表下方) */}
+                  {!isConsumerMode && stats.dilution > 0 && (
+                     <div className="flex justify-between items-center py-2 border-b border-slate-800/50">
+                        <span className="text-blue-400/80 italic text-sm">
+                           + Dilution (融水 {item.technique})
+                        </span>
+                        <span className="text-blue-400 font-mono font-bold">
+                           {stats.dilution}ml
+                        </span>
+                     </div>
+                  )}
                 </div>
               </div>
             )}
 
+            {/* 步驟與描述區塊 */}
             {!isFood && (
               <div>
                 <h3 className="text-sm font-bold text-slate-500 uppercase tracking-wider mb-3 flex items-center gap-2">
@@ -4517,6 +4596,7 @@ const ViewerOverlay = ({
               </div>
             )}
 
+            {/* 風味標籤區塊 */}
             <div className="space-y-4">
               {item.flavorDescription && (
                 <div className="bg-gradient-to-br from-amber-900/10 to-transparent p-4 rounded-xl border border-amber-500/10 relative">
@@ -4544,6 +4624,7 @@ const ViewerOverlay = ({
           </div>
         </div>
 
+        {/* 底部按鈕區 */}
         <div className="p-4 border-t border-slate-800 bg-slate-950 pb-safe z-20 flex gap-3 shrink-0">
           <button
             onClick={() =>
@@ -4581,7 +4662,6 @@ const ViewerOverlay = ({
     </div>
   );
 };
-
 // ==========================================
 // 5. Login Screen (修正：括號與權限顯示)
 // ==========================================
@@ -4696,9 +4776,7 @@ const LoginScreen = ({ onLogin }) => {
       <h1 className="text-3xl font-serif text-white font-bold mb-2">
         Bar Manager
       </h1>
-      <p className="text-slate-400 text-sm mb-8">
-        雲端調酒管理系統 v14.3 (Pro)
-      </p>
+      <p className="text-slate-400 text-sm mb-8">雲端調酒管理系統 {APP_VERSION}</p>
 
       <div className="w-full max-w-sm space-y-4">
         <div className="space-y-1">
@@ -5168,6 +5246,7 @@ function MainAppContent() {
     setIsLoggedIn(true);
     localStorage.setItem('bar_shop_id', sid);
     localStorage.setItem('bar_user_role', role);
+    setActiveTab('recipes'); 
   };
 
   const handleLogout = () => {
@@ -5748,9 +5827,12 @@ const handleUnlockConfirm = () => {
         {activeTab === 'tools' && (
           <div className="h-full flex flex-col overflow-y-auto p-6 space-y-6 pt-20 custom-scrollbar pb-32">
             <div className="text-center">
-              <h2 className="text-xl font-serif text-white">
-                Bar Manager Cloud
-              </h2>
+            <h2 className="text-xl font-serif text-white flex items-center justify-center gap-2">
+                  Bar Manager Cloud
+                  <span className="text-[10px] bg-amber-900/50 text-amber-500 border border-amber-500/50 px-1.5 py-0.5 rounded font-sans font-bold">
+                    {APP_VERSION}
+                  </span>
+                </h2>
               <p className="text-xs text-slate-500">
                 Shop ID: {shopId} /{' '}
                 {userRole === 'manager'
@@ -5992,23 +6074,6 @@ const handleUnlockConfirm = () => {
                 >
                   <RefreshCcw size={14} /> 重置系統 (危險)
                 </button>
-                {/* === 暫時的除靈按鈕 (修復完後可刪除) === */}
-                <button
-                  onClick={() => {
-                    // 只保留「有ID」且「有名字」的正常資料
-                    const cleanRecipes = recipes.filter(r => r.id && r.nameZh && r.nameZh.trim() !== '');
-                    
-                    setRecipes(cleanRecipes);
-                    // 強制更新本地暫存
-                    localStorage.setItem('bar_recipes_v3', JSON.stringify(cleanRecipes));
-                    
-                    alert(`除靈成功！已清除 ${recipes.length - cleanRecipes.length} 筆幽靈資料。`);
-                  }}
-                  className="w-full py-3 mt-3 bg-slate-800 border border-amber-500 text-amber-500 rounded-xl font-bold flex items-center justify-center gap-2 hover:bg-slate-700"
-                >
-                   🧹 清除幽靈酒譜 (異常資料)
-                </button>
-                {/* === 結束 === */}
               </div>
             )}
 
