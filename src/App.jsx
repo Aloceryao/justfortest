@@ -3246,6 +3246,12 @@ const EditorSheet = ({
     else setItem({ ...item, tags: [...tags, tag] });
   };
   const handleSaveWrapper = async () => {
+    // ★ 新增防呆：如果沒有輸入名字，禁止儲存
+    if (!item.nameZh || !item.nameZh.trim()) {
+      if (showAlert) showAlert('資料不完整', '請輸入「中文名稱」才能儲存喔！');
+      else alert('請輸入中文名稱才能儲存！');
+      return;
+    }
     setIsSaving(true);
     try {
       await onSave();
@@ -5189,33 +5195,36 @@ function MainAppContent() {
     setPasswordInput('');
   };
 
-  // 修改後的解鎖邏輯
-  const handleUnlockConfirm = () => {
-    // 1. 檢查是否為「店長密碼」
-    if (!adminPassword || passwordInput === adminPassword) {
-      setUserRole('owner');
-      setShowPasswordModal(false);
-      return;
-    }
+// 修改後的解鎖邏輯 (修正版：員工優先)
+const handleUnlockConfirm = () => {
+    
+  // 1. 第一順位：先檢查是否為「員工密碼」
+  // 如果輸入的是員工密碼，直接讓他變回員工，並結束函式。
+  const staffMatch = staffList.find((s) => s.password === passwordInput);
+  if (staffMatch) {
+    setUserRole(staffMatch.role); // 變回該員工的身分 (manager 或 staff)
+    setShowPasswordModal(false);
+    return;
+  }
 
-    // 2. 檢查是否為「員工密碼」
-    const staffMatch = staffList.find((s) => s.password === passwordInput);
-    if (staffMatch) {
-      setUserRole(staffMatch.role); // 變回該員工的身分
-      setShowPasswordModal(false);
-      return;
-    }
+  // 2. 第二順位：檢查是否為「店長密碼」
+  // 只有當輸入內容「完全等於」儲存的店長密碼時才放行
+  if (passwordInput === adminPassword) {
+    setUserRole('owner');
+    setShowPasswordModal(false);
+    return;
+  }
 
-    // 3. 緊急後門
-    if (passwordInput === '9999') {
-      alert('使用緊急密碼解鎖');
-      setUserRole('owner');
-      setShowPasswordModal(false);
-      return;
-    }
+  // 3. 第三順位：緊急後門
+  if (passwordInput === '9999') {
+    alert('使用緊急密碼解鎖');
+    setUserRole('owner');
+    setShowPasswordModal(false);
+    return;
+  }
 
-    alert('密碼錯誤！請輸入店長密碼或員工密碼');
-  };
+  alert('密碼錯誤！請輸入正確的店長或員工密碼');
+};
 
   const handleSetPassword = async () => {
     setAdminPassword(newPasswordInput);
@@ -5590,11 +5599,37 @@ function MainAppContent() {
     setEditorMode(null);
   };
 
+  // 修改後的 startEdit：自動補 ID + 自動命名「草稿 XX」
   const startEdit = (mode, item) => {
     setEditorMode(mode);
+    
+    // 如果是「編輯舊資料」或是「從草稿轉過來的資料」
     if (item) {
-      setEditingItem(item);
-    } else {
+      // 檢查這筆資料有沒有 ID？(沒有 ID = 來自草稿)
+      if (!item.id) {
+        
+        // --- 自動命名邏輯開始 ---
+        // 1. 算出目前有幾個酒譜的名字是用「草稿」開頭的
+        const draftCount = recipes.filter(r => r.nameZh && r.nameZh.startsWith('草稿')).length;
+        
+        // 2. 產生新名稱 (例如：草稿 01, 草稿 02...)
+        // String(...).padStart(2, '0') 會確保數字是兩位數 (1 -> 01)
+        const autoName = `草稿 ${String(draftCount + 1).padStart(2, '0')}`;
+        // --- 自動命名邏輯結束 ---
+
+        setEditingItem({ 
+          ...item, 
+          id: generateId(), 
+          // 如果草稿本身沒名字，就用自動產生的「草稿 XX」；如果有名字就保留
+          nameZh: item.nameZh || autoName 
+        });
+      } else {
+        // 如果有 ID (舊資料)，直接設定就好
+        setEditingItem(item);
+      }
+    } 
+    // 如果是「完全新增」一筆資料 (點擊 + 按鈕)
+    else {
       const newItem = { id: generateId(), nameZh: '' };
       if (mode === 'recipe') {
         Object.assign(newItem, {
