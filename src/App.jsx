@@ -289,9 +289,10 @@ const DEFAULT_BASE_SPIRITS = [
   'Liqueur 利口酒',
 ];
 
+// ★ 修改：擴充更多圖示選項
 const ICON_TYPES = {
   whisky: {
-    label: '威士忌杯',
+    label: '威士忌',
     component: (props) => (
       <svg {...props} viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="1.5">
         <path d="M5 4h14v14a2 2 0 0 1-2 2H7a2 2 0 0 1-2-2V4z" />
@@ -300,7 +301,7 @@ const ICON_TYPES = {
     ),
   },
   martini: {
-    label: '馬丁尼杯',
+    label: '馬丁尼',
     component: (props) => (
       <svg {...props} viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="1.5">
         <path d="M8 22h8" />
@@ -317,7 +318,7 @@ const ICON_TYPES = {
       </svg>
     ),
   },
-  snifter: {
+  snifter: { // ★ 補回這個
     label: '白蘭地杯',
     component: (props) => (
       <svg {...props} viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="1.5">
@@ -329,7 +330,7 @@ const ICON_TYPES = {
     ),
   },
   shot: {
-    label: '一口杯',
+    label: 'Shot',
     component: (props) => (
       <svg {...props} viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="1.5">
         <path d="M18 3l-2 18H8L6 3h12z" />
@@ -337,16 +338,10 @@ const ICON_TYPES = {
     ),
   },
   wine: {
-    label: '酒杯',
-    component: (props) => (
-      <svg {...props} viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="1.5">
-        <path d="M9 21h6" />
-        <path d="M12 21v-6" />
-        <path d="M12 15a5 5 0 0 0 5-5c0-2-.5-4-1.5-4.5l-3.5 2-3.5-2C7.5 6 7 8 7 10a5 5 0 0 0 5 5z" />
-      </svg>
-    ),
+    label: '紅酒杯',
+    component: (props) => <Wine {...props} />,
   },
-  shaker: {
+  shaker: { // ★ 還有補回這個 (這是最重要的預設值)
     label: '雪克杯',
     component: (props) => (
       <svg {...props} viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="1.5">
@@ -356,19 +351,56 @@ const ICON_TYPES = {
       </svg>
     ),
   },
+  beer: {
+    label: '啤酒',
+    component: (props) => <Beer {...props} />,
+  },
+  coffee: {
+    label: '咖啡',
+    component: (props) => <Coffee {...props} />,
+  },
+  food: {
+    label: '餐點',
+    component: (props) => <Utensils {...props} />,
+  },
   soft: {
     label: '軟飲',
     component: (props) => (
       <svg {...props} viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="1.5">
         <circle cx="12" cy="12" r="9" />
+        <path d="M12 3v18" opacity="0.3"/>
+      </svg>
+    ),
+  },
+  star: {
+    label: '精選',
+    component: (props) => <Star {...props} />,
+  },
+  fire: {
+    label: '熱門',
+    component: (props) => (
+      <svg {...props} viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="1.5">
+        <path d="M8.5 14.5A2.5 2.5 0 0 0 11 12c0-1.38-.5-2-1-3-1.072-2.143-.224-4.054 2-6 .5 2.5 2 4.9 4 6.5 2 1.6 3 3.5 3 5.5a7 7 0 1 1-14 0c0-1.1.2-2.2.6-3.3.7.8 2.2 1.2 2.9 1.8z" />
       </svg>
     ),
   },
 };
 
 const CategoryIcon = ({ iconType, className }) => {
-  const IconComponent =
-    ICON_TYPES[iconType]?.component || ICON_TYPES['shaker'].component;
+  // 1. 先試著找目標圖示
+  let IconData = ICON_TYPES[iconType];
+  
+  // 2. 如果找不到，試著找 'shaker'
+  if (!IconData) {
+    IconData = ICON_TYPES['shaker'];
+  }
+
+  // 3. 如果連 shaker 都沒有 (極端情況)，就回傳一個空的 placeholder 防止當機
+  if (!IconData) {
+    return <div className={`w-6 h-6 bg-slate-700 rounded-full ${className}`} />;
+  }
+
+  const IconComponent = IconData.component;
   return <IconComponent className={className} />;
 };
 
@@ -378,7 +410,7 @@ const safeString = (str) => (str || '').toString();
 // ==========================================
 // ★ 版本號設定 (修改這裡會同步更新登入頁與設定頁)
 // ==========================================
-const APP_VERSION = 'v15.3.4 (升級版)';
+const APP_VERSION = 'v15.3.5 (升級版)';
 const safeNumber = (num) => {
   const n = parseFloat(num);
   return isNaN(n) ? 0 : n;
@@ -970,6 +1002,8 @@ const CategoryEditModal = ({
   const [nameZh, setNameZh] = useState('');
   const [nameEn, setNameEn] = useState('');
   const [iconType, setIconType] = useState('whisky');
+  
+  // 預設漸層，或是使用者自訂的 Hex 色碼
   const [gradient, setGradient] = useState('from-slate-600 to-gray-700');
   const [targetBase, setTargetBase] = useState('');
 
@@ -1008,8 +1042,8 @@ const CategoryEditModal = ({
         const rawId = val.replace('TYPE_', '');
         const found = ingCategories.find((c) => c.id === rawId);
         if (found) {
-          setNameZh(found.label); 
-          setNameEn(found.label); 
+          setNameZh(found.label);
+          setNameEn(found.label);
         }
       } else {
         const parts = val.split(' ');
@@ -1031,18 +1065,20 @@ const CategoryEditModal = ({
     { id: 'purple', val: 'from-purple-600 to-violet-700' },
     { id: 'cyan', val: 'from-cyan-600 to-blue-700' },
     { id: 'slate', val: 'from-slate-600 to-gray-700' },
+    { id: 'black', val: 'from-slate-800 to-black' },
   ];
 
   return (
     <div className="fixed inset-0 z-[60] flex items-center justify-center p-4 bg-black/80 backdrop-blur-sm animate-fade-in">
-      <div className="bg-slate-900 border border-slate-700 w-full max-w-sm rounded-2xl shadow-2xl p-6 animate-scale-in">
-        <div className="flex justify-between items-center mb-6">
+      <div className="bg-slate-900 border border-slate-700 w-full max-w-sm rounded-2xl shadow-2xl p-6 animate-scale-in flex flex-col max-h-[90vh]">
+        <div className="flex justify-between items-center mb-6 shrink-0">
           <h3 className="text-xl font-bold text-white">新增分類色塊</h3>
           <button onClick={onClose}>
             <X className="text-slate-400" />
           </button>
         </div>
-        <div className="space-y-4">
+        
+        <div className="space-y-4 overflow-y-auto custom-scrollbar pr-1">
           <div>
             <label className="text-xs font-bold text-amber-500 uppercase mb-1 block">
               1. 選擇篩選目標
@@ -1055,37 +1091,24 @@ const CategoryEditModal = ({
               <option value="" className="text-slate-400">
                 -- 請選擇分類 --
               </option>
-              <optgroup
-                label="特殊分類"
-                className="text-amber-500 bg-slate-900"
-              >
+              <optgroup label="特殊分類" className="text-amber-500 bg-slate-900">
                 <option value="TYPE_SOFT" className="text-white">
                   軟性飲料 (Soft Drink)
                 </option>
               </optgroup>
 
-              <optgroup
-                label="材料庫分類 (Ingredient Type)"
-                className="text-blue-400 bg-slate-900"
-              >
+              <optgroup label="材料庫分類 (Ingredient Type)" className="text-blue-400 bg-slate-900">
                 {ingCategories &&
                   ingCategories
                     .filter((c) => !['alcohol', 'soft', 'other'].includes(c.id))
                     .map((c) => (
-                      <option
-                        key={c.id}
-                        value={`TYPE_${c.id}`}
-                        className="text-white"
-                      >
+                      <option key={c.id} value={`TYPE_${c.id}`} className="text-white">
                         {c.label}
                       </option>
                     ))}
               </optgroup>
 
-              <optgroup
-                label="基酒 (Base Spirit)"
-                className="text-purple-400 bg-slate-900"
-              >
+              <optgroup label="基酒 (Base Spirit)" className="text-purple-400 bg-slate-900">
                 {availableBases
                   .filter((b) => !b.includes('Soft') && !b.includes('軟'))
                   .map((b) => (
@@ -1095,9 +1118,6 @@ const CategoryEditModal = ({
                   ))}
               </optgroup>
             </select>
-            <p className="text-[10px] text-slate-500 mt-1">
-              選定後，點擊方塊只會顯示該分類的材料。
-            </p>
           </div>
 
           <div>
@@ -1127,27 +1147,30 @@ const CategoryEditModal = ({
             <label className="text-xs font-bold text-slate-500 uppercase mb-2 block">
               選擇圖示
             </label>
-            <div className="grid grid-cols-4 gap-2">
+            <div className="grid grid-cols-5 gap-2">
               {Object.entries(ICON_TYPES).map(([key, val]) => (
                 <button
                   key={key}
                   onClick={() => setIconType(key)}
-                  className={`p-2 rounded-lg border flex items-center justify-center ${
+                  className={`p-2 rounded-lg border flex flex-col items-center justify-center aspect-square ${
                     iconType === key
                       ? 'bg-slate-700 border-amber-500 text-amber-500'
                       : 'border-slate-700 text-slate-500'
                   }`}
+                  title={val.label}
                 >
                   {val.component({ width: 20, height: 20 })}
                 </button>
               ))}
             </div>
           </div>
+          
           <div>
             <label className="text-xs font-bold text-slate-500 uppercase mb-2 block">
               選擇顏色
             </label>
-            <div className="flex flex-wrap gap-2">
+            <div className="flex flex-wrap gap-2 items-center">
+              {/* 預設漸層按鈕 */}
               {gradients.map((g) => (
                 <button
                   key={g.id}
@@ -1159,12 +1182,32 @@ const CategoryEditModal = ({
                   }`}
                 />
               ))}
+              
+              {/* ★ 新增：自訂顏色選擇器 */}
+              <div className="relative group">
+                <input
+                    type="color"
+                    onChange={(e) => setGradient(e.target.value)}
+                    className="opacity-0 absolute inset-0 w-full h-full cursor-pointer"
+                />
+                <button className={`w-8 h-8 rounded-full bg-slate-800 border-2 flex items-center justify-center ring-2 ring-offset-2 ring-offset-slate-900 ${
+                    gradient.startsWith('#') ? 'ring-white border-transparent' : 'border-slate-600 ring-transparent'
+                }`}
+                 style={gradient.startsWith('#') ? {backgroundColor: gradient} : {}}
+                >
+                    {gradient.startsWith('#') ? '' : <Edit3 size={12} className="text-slate-400"/>}
+                </button>
+                <div className="absolute -top-8 left-1/2 -translate-x-1/2 bg-black text-white text-[10px] px-2 py-1 rounded opacity-0 group-hover:opacity-100 transition pointer-events-none whitespace-nowrap">
+                    自訂顏色
+                </div>
+              </div>
             </div>
           </div>
         </div>
+        
         <button
           onClick={handleSubmit}
-          className="w-full bg-amber-600 text-white font-bold py-3 rounded-xl mt-6"
+          className="w-full bg-amber-600 text-white font-bold py-3 rounded-xl mt-6 shrink-0"
         >
           建立分類
         </button>
@@ -1202,38 +1245,48 @@ const CategoryGrid = ({
         )}
       </div>
       <div className="grid grid-cols-2 md:grid-cols-3 gap-4">
-        {categories.map((cat, idx) => (
-          <div
-            key={cat.id || idx}
-            onClick={() => !isEditing && onSelect(cat)}
-            className={`relative h-28 rounded-2xl bg-gradient-to-br ${
-              cat.gradient || 'from-slate-700 to-slate-800'
-            } shadow-lg overflow-hidden cursor-pointer hover:scale-[1.02] active:scale-95 transition-all border border-white/10 group`}
-          >
-            <div className="absolute -right-2 -bottom-4 w-24 h-24 text-white opacity-20 transform rotate-[-15deg] group-hover:scale-110 group-hover:opacity-30 transition-all duration-500 pointer-events-none">
-              <CategoryIcon iconType={cat.iconType} />
-            </div>
-            <div className="absolute inset-0 p-4 flex flex-col justify-center items-center z-10">
-              <span className="text-white font-bold text-xl text-center drop-shadow-md tracking-wide">
-                {cat.nameZh}
-              </span>
-              <span className="text-[10px] text-white/70 font-medium uppercase tracking-wider mt-1 border-t border-white/20 pt-1 px-2">
-                {cat.nameEn}
-              </span>
-            </div>
-            {(role === 'owner' || role === 'manager') && isEditing && (
-              <button
-                onClick={(e) => {
-                  e.stopPropagation();
-                  onDelete(cat.id);
-                }}
-                className="absolute top-2 right-2 bg-rose-500 text-white rounded-full p-1.5 shadow-md hover:bg-rose-600 animate-scale-in z-20"
+        {categories.map((cat, idx) => {
+            // ★ 修改：判斷是預設漸層 (Tailwind Class) 還是自訂顏色 (Hex Code)
+            const isCustomColor = cat.gradient && cat.gradient.startsWith('#');
+            const styleObj = isCustomColor 
+                ? { background: `linear-gradient(135deg, ${cat.gradient}, #1a1a1a)` } 
+                : {};
+            const classStr = isCustomColor 
+                ? '' 
+                : `bg-gradient-to-br ${cat.gradient || 'from-slate-700 to-slate-800'}`;
+
+            return (
+              <div
+                key={cat.id || idx}
+                onClick={() => !isEditing && onSelect(cat)}
+                style={styleObj} // 套用自訂顏色
+                className={`relative h-28 rounded-2xl ${classStr} shadow-lg overflow-hidden cursor-pointer hover:scale-[1.02] active:scale-95 transition-all border border-white/10 group`}
               >
-                <X size={14} strokeWidth={3} />
-              </button>
-            )}
-          </div>
-        ))}
+                <div className="absolute -right-2 -bottom-4 w-24 h-24 text-white opacity-20 transform rotate-[-15deg] group-hover:scale-110 group-hover:opacity-30 transition-all duration-500 pointer-events-none">
+                  <CategoryIcon iconType={cat.iconType} />
+                </div>
+                <div className="absolute inset-0 p-4 flex flex-col justify-center items-center z-10">
+                  <span className="text-white font-bold text-xl text-center drop-shadow-md tracking-wide">
+                    {cat.nameZh}
+                  </span>
+                  <span className="text-[10px] text-white/70 font-medium uppercase tracking-wider mt-1 border-t border-white/20 pt-1 px-2">
+                    {cat.nameEn}
+                  </span>
+                </div>
+                {(role === 'owner' || role === 'manager') && isEditing && (
+                  <button
+                    onClick={(e) => {
+                      e.stopPropagation();
+                      onDelete(cat.id);
+                    }}
+                    className="absolute top-2 right-2 bg-rose-500 text-white rounded-full p-1.5 shadow-md hover:bg-rose-600 animate-scale-in z-20"
+                  >
+                    <X size={14} strokeWidth={3} />
+                  </button>
+                )}
+              </div>
+            );
+        })}
         {(role === 'owner' || role === 'manager') && (
           <button
             onClick={onAdd}
