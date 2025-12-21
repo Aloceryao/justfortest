@@ -378,7 +378,7 @@ const safeString = (str) => (str || '').toString();
 // ==========================================
 // ★ 版本號設定 (修改這裡會同步更新登入頁與設定頁)
 // ==========================================
-const APP_VERSION = 'v15.3.1 (升級版)';
+const APP_VERSION = 'v15.3.2 (升級版)';
 const safeNumber = (num) => {
   const n = parseFloat(num);
   return isNaN(n) ? 0 : n;
@@ -1663,7 +1663,10 @@ const RecipeListScreen = ({
   });
 
   useEffect(() => {
-    localStorage.setItem('bar_grid_cats_v9', JSON.stringify(gridCategories));
+    localStorage.setItem(
+      'bar_grid_cats_v9',
+      JSON.stringify(gridCategories)
+    );
   }, [gridCategories]);
   useEffect(() => {
     if (activeBlock)
@@ -1677,15 +1680,21 @@ const RecipeListScreen = ({
   const showGrid =
     !searchTerm && !activeBlock && recipeCategoryFilter !== 'all';
 
+  // ★ 二度修改：只顯示「目前還存在的大分類」底下的小標籤 (自動過濾掉已刪除分類的殘留標籤)
   const allSubTypes = useMemo(() => {
-      let list = [];
-      if(categorySubItems) {
-          Object.values(categorySubItems).forEach(subList => {
-              if(Array.isArray(subList)) list = [...list, ...subList];
-          });
-      }
-      return list;
-  }, [categorySubItems]);
+    let list = [];
+    if (categorySubItems && ingCategories) {
+      // 只遍歷「目前有效」的大分類
+      ingCategories.forEach((cat) => {
+        const subList = categorySubItems[cat.id];
+        if (Array.isArray(subList)) {
+          list = [...list, ...subList];
+        }
+      });
+    }
+    // 使用 Set 自動過濾重複值
+    return [...new Set(list)];
+  }, [categorySubItems, ingCategories]);
 
   const handleBlockSelect = (cat) => {
     setActiveBlock(cat);
@@ -1731,8 +1740,8 @@ const RecipeListScreen = ({
       .filter((i) => i.addToSingle)
       .map((i) => ({
         ...i,
-        category: 'single', 
-        type: i.type, 
+        category: 'single',
+        type: i.type,
         baseSpirit: i.subType || '',
         priceShot: i.priceShot || '',
         priceGlass: i.priceGlass || '',
@@ -1750,18 +1759,22 @@ const RecipeListScreen = ({
       const matchCat =
         recipeCategoryFilter === 'all' ||
         r.type === recipeCategoryFilter ||
-        (recipeCategoryFilter === 'single' && (r.type === 'soft' || r.isIngredient || r.type === 'single')); 
-        
+        (recipeCategoryFilter === 'single' &&
+          (r.type === 'soft' || r.isIngredient || r.type === 'single'));
+
       const matchSearch =
         safeString(r.nameZh).includes(searchTerm) ||
-        safeString(r.nameEn).toLowerCase().includes(searchTerm.toLowerCase());
+        safeString(r.nameEn)
+          .toLowerCase()
+          .includes(searchTerm.toLowerCase());
 
       const matchBase =
         filterBases.length === 0 ||
         filterBases.includes(r.baseSpirit) ||
         filterBases.includes(r.subType);
       const matchTags =
-        filterTags.length === 0 || filterTags.every((t) => r.tags?.includes(t));
+        filterTags.length === 0 ||
+        filterTags.every((t) => r.tags?.includes(t));
 
       let matchGrid = true;
       if (activeBlock) {
@@ -1769,7 +1782,8 @@ const RecipeListScreen = ({
         if (!target) {
           const found = allSubTypes.find(
             (b) =>
-              b.includes(activeBlock.nameZh) || b.includes(activeBlock.nameEn)
+              b.includes(activeBlock.nameZh) ||
+              b.includes(activeBlock.nameEn)
           );
           if (found) target = found;
         }
@@ -1777,8 +1791,7 @@ const RecipeListScreen = ({
         if (target) {
           if (target === 'TYPE_SOFT') {
             matchGrid = r.type === 'soft';
-          }
-          else if (target.startsWith('TYPE_')) {
+          } else if (target.startsWith('TYPE_')) {
             const rawType = target.replace('TYPE_', '');
             if (r.isIngredient) {
               matchGrid = r.type === rawType;
@@ -1786,7 +1799,8 @@ const RecipeListScreen = ({
               matchGrid = false;
             }
           } else {
-            matchGrid = r.baseSpirit === target || r.subType === target;
+            matchGrid =
+              r.baseSpirit === target || r.subType === target;
           }
         } else {
           matchGrid = r.tags?.includes(activeBlock.nameZh);
@@ -1826,7 +1840,9 @@ const RecipeListScreen = ({
             <button
               onClick={() => setShowFilters(!showFilters)}
               className={`p-2 rounded-xl border transition-colors ${
-                showFilters || filterBases.length > 0 || filterTags.length > 0
+                showFilters ||
+                filterBases.length > 0 ||
+                filterTags.length > 0
                   ? 'bg-slate-800 border-amber-500/50 text-amber-500'
                   : 'border-slate-800 text-slate-400'
               }`}
@@ -1966,8 +1982,8 @@ const RecipeListScreen = ({
         isOpen={showCatModal}
         onClose={() => setShowCatModal(false)}
         onSave={handleAddCategory}
-        availableBases={allSubTypes} 
-        ingCategories={ingCategories} 
+        availableBases={allSubTypes}
+        ingCategories={ingCategories}
       />
     </div>
   );
@@ -2497,8 +2513,9 @@ const InventoryScreen = ({
   setIngCategories,
   showConfirm,
   onBatchAdd,
-  categorySubItems, // 接收子分類資料結構
-  onAddSubCategory, // 接收新增子分類的 function
+  categorySubItems,
+  onAddSubCategory,
+  onDeleteSubCategory, // ★ 新增：接收刪除功能的接口
   isReadOnly,
 }) => {
   const [categoryFilter, setCategoryFilter] = useState('all');
@@ -2508,7 +2525,7 @@ const InventoryScreen = ({
   const [showBatchModal, setShowBatchModal] = useState(false);
   const [batchText, setBatchText] = useState('');
   const [batchCategory, setBatchCategory] = useState('other');
-  
+
   // 新增子分類相關
   const [isAddingSubCat, setIsAddingSubCat] = useState(false);
   const [newSubCatName, setNewSubCatName] = useState('');
@@ -2539,14 +2556,24 @@ const InventoryScreen = ({
       if (categoryFilter === id) setCategoryFilter('all');
     });
   };
-  
+
   // 處理新增子分類
   const handleAddNewSubCat = () => {
-      if(newSubCatName.trim() && onAddSubCategory) {
-          onAddSubCategory(categoryFilter, newSubCatName.trim());
-          setNewSubCatName('');
-          setIsAddingSubCat(false);
-      }
+    if (newSubCatName.trim() && onAddSubCategory) {
+      onAddSubCategory(categoryFilter, newSubCatName.trim());
+      setNewSubCatName('');
+      setIsAddingSubCat(false);
+    }
+  };
+
+  // ★ 新增：處理刪除子分類
+  const handleDeleteSubCat = (subItem) => {
+    if (onDeleteSubCategory) {
+      showConfirm('刪除確認', `確定要刪除小分類「${subItem}」嗎？`, () => {
+        onDeleteSubCategory(categoryFilter, subItem);
+        if (subCategoryFilter === subItem) setSubCategoryFilter('all');
+      });
+    }
   };
 
   const handleBatchSubmit = () => {
@@ -2571,11 +2598,11 @@ const InventoryScreen = ({
   const filteredIngredients = useMemo(() => {
     let list = ingredients.filter((i) => {
       if (categoryFilter !== 'all' && i.type !== categoryFilter) return false;
-      
+
       if (categoryFilter !== 'all' && subCategoryFilter !== 'all') {
         return i.subType === subCategoryFilter;
       }
-      
+
       if (
         search &&
         !(
@@ -2596,9 +2623,10 @@ const InventoryScreen = ({
     return list;
   }, [ingredients, categoryFilter, subCategoryFilter, sortBy, search]);
 
-  const currentSubOptions = categoryFilter !== 'all' && categorySubItems 
-    ? (categorySubItems[categoryFilter] || []) 
-    : [];
+  const currentSubOptions =
+    categoryFilter !== 'all' && categorySubItems
+      ? categorySubItems[categoryFilter] || []
+      : [];
 
   return (
     <div className="h-full flex flex-col w-full bg-slate-950">
@@ -2730,7 +2758,7 @@ const InventoryScreen = ({
               </button>
             ))}
         </div>
-        
+
         {categoryFilter !== 'all' && (
           <div className="flex flex-wrap gap-2 pb-2 mt-2 w-full animate-slide-up bg-slate-900/30 p-2 rounded-lg">
             <span className="text-[10px] text-slate-500 font-bold uppercase tracking-wider py-1.5 flex items-center">
@@ -2747,48 +2775,63 @@ const InventoryScreen = ({
               全部
             </button>
             {currentSubOptions.map((subItem) => (
-              <button
-                key={subItem}
-                onClick={() => setSubCategoryFilter(subItem)}
-                className={`whitespace-nowrap px-3 py-1.5 rounded text-xs font-medium transition-colors border ${
-                  subCategoryFilter === subItem
-                    ? 'bg-slate-700 border-slate-600 text-white'
-                    : 'border-transparent text-slate-500 hover:text-slate-300'
-                }`}
-              >
-                {safeString(subItem).split(' ')[0]}
-              </button>
+              // ★ 修改：加上刪除小分類的按鈕
+              <div key={subItem} className="relative group">
+                <button
+                  onClick={() => setSubCategoryFilter(subItem)}
+                  className={`whitespace-nowrap px-3 py-1.5 rounded text-xs font-medium transition-colors border ${
+                    subCategoryFilter === subItem
+                      ? 'bg-slate-700 border-slate-600 text-white'
+                      : 'border-transparent text-slate-500 hover:text-slate-300'
+                  }`}
+                >
+                  {safeString(subItem).split(' ')[0]}
+                </button>
+                {!isReadOnly && (
+                  <button
+                    onClick={(e) => {
+                      e.stopPropagation();
+                      handleDeleteSubCat(subItem);
+                    }}
+                    className="absolute -top-1 -right-1 bg-rose-600 text-white rounded-full p-0.5 w-4 h-4 flex items-center justify-center opacity-0 group-hover:opacity-100 transition-opacity text-[8px]"
+                  >
+                    <X size={8} strokeWidth={4} />
+                  </button>
+                )}
+              </div>
             ))}
-            
+
             {!isReadOnly && (
-                isAddingSubCat ? (
-                    <div className="flex items-center bg-slate-800 rounded px-2 py-1 border border-slate-600 animate-fade-in h-[26px]">
-                        <input
-                          autoFocus
-                          className="bg-transparent text-xs text-white w-20 outline-none"
-                          placeholder="新子分類"
-                          value={newSubCatName}
-                          onChange={(e) => setNewSubCatName(e.target.value)}
-                          onKeyDown={(e) => e.key === 'Enter' && handleAddNewSubCat()}
-                          onBlur={() => {
-                            if (!newSubCatName) setIsAddingSubCat(false);
-                          }}
-                        />
-                        <button
-                          onClick={handleAddNewSubCat}
-                          className="text-amber-500 ml-1"
-                        >
-                          <Check size={12} />
-                        </button>
-                    </div>
-                ) : (
-                    <button
-                      onClick={() => setIsAddingSubCat(true)}
-                      className="px-2 py-1.5 rounded text-xs font-medium border border-slate-700 border-dashed text-slate-500 hover:text-amber-500 hover:border-amber-500 transition-colors"
-                    >
-                      +
-                    </button>
-                )
+              isAddingSubCat ? (
+                <div className="flex items-center bg-slate-800 rounded px-2 py-1 border border-slate-600 animate-fade-in h-[26px]">
+                  <input
+                    autoFocus
+                    className="bg-transparent text-xs text-white w-20 outline-none"
+                    placeholder="新子分類"
+                    value={newSubCatName}
+                    onChange={(e) => setNewSubCatName(e.target.value)}
+                    onKeyDown={(e) =>
+                      e.key === 'Enter' && handleAddNewSubCat()
+                    }
+                    onBlur={() => {
+                      if (!newSubCatName) setIsAddingSubCat(false);
+                    }}
+                  />
+                  <button
+                    onClick={handleAddNewSubCat}
+                    className="text-amber-500 ml-1"
+                  >
+                    <Check size={12} />
+                  </button>
+                </div>
+              ) : (
+                <button
+                  onClick={() => setIsAddingSubCat(true)}
+                  className="px-2 py-1.5 rounded text-xs font-medium border border-slate-700 border-dashed text-slate-500 hover:text-amber-500 hover:border-amber-500 transition-colors"
+                >
+                  +
+                </button>
+              )
             )}
           </div>
         )}
@@ -2861,7 +2904,9 @@ const InventoryScreen = ({
             >
               確認新增{' '}
               {batchText.split('\n').filter((l) => l.trim()).length > 0
-                ? `(${batchText.split('\n').filter((l) => l.trim()).length} 筆)`
+                ? `(${
+                    batchText.split('\n').filter((l) => l.trim()).length
+                  } 筆)`
                 : ''}
             </button>
           </div>
@@ -5011,7 +5056,7 @@ const LoginScreen = ({ onLogin }) => {
 // --- 6. Main App Container ---
 
 function MainAppContent() {
-  const [showPageIntro, setShowPageIntro] = useState(false); // ★ 修正：加入狀態控制
+  const [showPageIntro, setShowPageIntro] = useState(false);
   const [activeTab, setActiveTab] = useState('recipes');
   const [firebaseReady, setFirebaseReady] = useState(false);
 
@@ -5021,7 +5066,7 @@ function MainAppContent() {
 
   const [ingredients, setIngredients] = useState([]);
   const [recipes, setRecipes] = useState([]);
-  const [foodItems, setFoodItems] = useState([]); 
+  const [foodItems, setFoodItems] = useState([]);
   const [sections, setSections] = useState([]);
   const [staffList, setStaffList] = useState([]);
   const [isOnline, setIsOnline] = useState(navigator.onLine);
@@ -5033,13 +5078,12 @@ function MainAppContent() {
   const [passwordInput, setPasswordInput] = useState('');
   const [newPasswordInput, setNewPasswordInput] = useState('');
   const [isSettingPassword, setIsSettingPassword] = useState(false);
-  const [showHelpModal, setShowHelpModal] = useState(false); // Help Modal
+  const [showHelpModal, setShowHelpModal] = useState(false);
 
   const [newStaffName, setNewStaffName] = useState('');
   const [newStaffPwd, setNewStaffPwd] = useState('');
   const [isNewStaffManager, setIsNewStaffManager] = useState(false);
 
-  // --- 新增：員工編輯邏輯開始 ---
   const [editingStaffId, setEditingStaffId] = useState(null);
 
   const startEditingStaff = (staff) => {
@@ -5073,7 +5117,7 @@ function MainAppContent() {
     });
 
     setStaffList(updatedList);
-    
+
     if (window.firebase && shopId) {
       await window.firebase
         .firestore()
@@ -5084,10 +5128,9 @@ function MainAppContent() {
         .set({ staffList: updatedList }, { merge: true });
     }
 
-    cancelEditingStaff(); 
+    cancelEditingStaff();
     showAlert('成功', '員工資料已更新');
   };
-  // --- 新增：員工編輯邏輯結束 ---
 
   const [editorMode, setEditorMode] = useState(null);
   const [editingItem, setEditingItem] = useState(null);
@@ -5131,38 +5174,60 @@ function MainAppContent() {
   });
 
   useEffect(() => {
-    localStorage.setItem('bar_custom_bases_v1', JSON.stringify(availableBases));
+    localStorage.setItem(
+      'bar_custom_bases_v1',
+      JSON.stringify(availableBases)
+    );
   }, [availableBases]);
-  
-  // 新增：管理所有分類的子分類清單 (Map: CategoryID -> SubCategoryList[])
+
   const [categorySubItems, setCategorySubItems] = useState(() => {
-      try {
-          const saved = localStorage.getItem('bar_category_subitems_v1');
-          if(saved) return JSON.parse(saved);
-          
-          return {
-              alcohol: DEFAULT_BASE_SPIRITS,
-              soft: ['Soda 蘇打', 'Juice 果汁', 'Syrup 糖漿', 'Tea 茶', 'Coffee 咖啡'],
-              other: ['Spice 香料', 'Fruit 水果', 'Garnish 裝飾'],
-          };
-      } catch(e) {
-          return { alcohol: DEFAULT_BASE_SPIRITS };
-      }
+    try {
+      const saved = localStorage.getItem('bar_category_subitems_v1');
+      if (saved) return JSON.parse(saved);
+
+      return {
+        alcohol: DEFAULT_BASE_SPIRITS,
+        soft: [
+          'Soda 蘇打',
+          'Juice 果汁',
+          'Syrup 糖漿',
+          'Tea 茶',
+          'Coffee 咖啡',
+        ],
+        other: ['Spice 香料', 'Fruit 水果', 'Garnish 裝飾'],
+      };
+    } catch (e) {
+      return { alcohol: DEFAULT_BASE_SPIRITS };
+    }
   });
-  
+
   useEffect(() => {
-      localStorage.setItem('bar_category_subitems_v1', JSON.stringify(categorySubItems));
+    localStorage.setItem(
+      'bar_category_subitems_v1',
+      JSON.stringify(categorySubItems)
+    );
   }, [categorySubItems]);
-  
+
   const handleAddSubCategory = (catId, subCatName) => {
-      setCategorySubItems(prev => {
-          const currentList = prev[catId] || [];
-          if(currentList.includes(subCatName)) return prev;
-          return {
-              ...prev,
-              [catId]: [...currentList, subCatName]
-          };
-      });
+    setCategorySubItems((prev) => {
+      const currentList = prev[catId] || [];
+      if (currentList.includes(subCatName)) return prev;
+      return {
+        ...prev,
+        [catId]: [...currentList, subCatName],
+      };
+    });
+  };
+
+  // ★ 新增：刪除子分類的邏輯
+  const handleDeleteSubCategory = (catId, subCatName) => {
+    setCategorySubItems((prev) => {
+      const currentList = prev[catId] || [];
+      return {
+        ...prev,
+        [catId]: currentList.filter((item) => item !== subCatName),
+      };
+    });
   };
 
   const [foodCategories, setFoodCategories] = useState(() => {
@@ -5190,11 +5255,32 @@ function MainAppContent() {
     );
   }, [foodCategories]);
 
-  const [ingCategories, setIngCategories] = useState([
-    { id: 'alcohol', label: '基酒 Alcohol' },
-    { id: 'soft', label: '軟性飲料 Soft' },
-    { id: 'other', label: '其他 Other' },
-  ]);
+  // ★ 修改：加入讀取與儲存功能，讓大分類不會重整後消失
+  const [ingCategories, setIngCategories] = useState(() => {
+    try {
+      const saved = localStorage.getItem('bar_ingredient_categories_v1');
+      return saved
+        ? JSON.parse(saved)
+        : [
+            { id: 'alcohol', label: '基酒 Alcohol' },
+            { id: 'soft', label: '軟性飲料 Soft' },
+            { id: 'other', label: '其他 Other' },
+          ];
+    } catch (e) {
+      return [
+        { id: 'alcohol', label: '基酒 Alcohol' },
+        { id: 'soft', label: '軟性飲料 Soft' },
+        { id: 'other', label: '其他 Other' },
+      ];
+    }
+  });
+
+  useEffect(() => {
+    localStorage.setItem(
+      'bar_ingredient_categories_v1',
+      JSON.stringify(ingCategories)
+    );
+  }, [ingCategories]);
 
   const [dialog, setDialog] = useState({
     isOpen: false,
@@ -5205,7 +5291,6 @@ function MainAppContent() {
   });
 
   useEffect(() => {
-    // Check URL parameters for auto-login
     const params = new URLSearchParams(window.location.search);
     const urlShop = params.get('shop');
     const urlMode = params.get('mode');
@@ -5215,7 +5300,7 @@ function MainAppContent() {
       setUserRole('customer');
       setIsLoggedIn(true);
       localStorage.setItem('bar_shop_id', urlShop);
-      localStorage.setItem('bar_user_role', 'customer'); 
+      localStorage.setItem('bar_user_role', 'customer');
     }
 
     const script = document.createElement('script');
@@ -5233,7 +5318,7 @@ function MainAppContent() {
 
     const savedShop = localStorage.getItem('bar_shop_id');
     const savedRole = localStorage.getItem('bar_user_role');
-     
+
     if (savedShop && savedRole && !urlShop) {
       setShopId(savedShop);
       setUserRole(savedRole);
@@ -5243,14 +5328,12 @@ function MainAppContent() {
     window.addEventListener('online', () => setIsOnline(true));
     window.addEventListener('offline', () => setIsOnline(false));
 
-    // ★ 新增：檢查是否看過歡迎頁
     const hasSeenIntro = localStorage.getItem('bar_has_seen_intro_v1');
     if (!hasSeenIntro) {
       setTimeout(() => setShowPageIntro(true), 500);
     }
   }, []);
 
-  // ★ 新增：關閉歡迎頁函式
   const handleCloseIntro = () => {
     localStorage.setItem('bar_has_seen_intro_v1', 'true');
     setShowPageIntro(false);
@@ -5339,7 +5422,7 @@ function MainAppContent() {
     setIsLoggedIn(true);
     localStorage.setItem('bar_shop_id', sid);
     localStorage.setItem('bar_user_role', role);
-    setActiveTab('recipes'); 
+    setActiveTab('recipes');
   };
 
   const handleLogout = () => {
@@ -5351,8 +5434,12 @@ function MainAppContent() {
     setFoodItems([]);
     setStaffList([]);
     if (window.history.pushState) {
-        const newurl = window.location.protocol + "//" + window.location.host + window.location.pathname;
-        window.history.pushState({path:newurl},'',newurl);
+      const newurl =
+        window.location.protocol +
+        '//' +
+        window.location.host +
+        window.location.pathname;
+      window.history.pushState({ path: newurl }, '', newurl);
     }
   };
 
@@ -5367,36 +5454,29 @@ function MainAppContent() {
     setPasswordInput('');
   };
 
-// 修改後的解鎖邏輯 (修正版：員工優先)
-const handleUnlockConfirm = () => {
-    
-  // 1. 第一順位：先檢查是否為「員工密碼」
-  // 如果輸入的是員工密碼，直接讓他變回員工，並結束函式。
-  const staffMatch = staffList.find((s) => s.password === passwordInput);
-  if (staffMatch) {
-    setUserRole(staffMatch.role); // 變回該員工的身分 (manager 或 staff)
-    setShowPasswordModal(false);
-    return;
-  }
+  const handleUnlockConfirm = () => {
+    const staffMatch = staffList.find((s) => s.password === passwordInput);
+    if (staffMatch) {
+      setUserRole(staffMatch.role);
+      setShowPasswordModal(false);
+      return;
+    }
 
-  // 2. 第二順位：檢查是否為「店長密碼」
-  // 只有當輸入內容「完全等於」儲存的店長密碼時才放行
-  if (passwordInput === adminPassword) {
-    setUserRole('owner');
-    setShowPasswordModal(false);
-    return;
-  }
+    if (passwordInput === adminPassword) {
+      setUserRole('owner');
+      setShowPasswordModal(false);
+      return;
+    }
 
-  // 3. 第三順位：緊急後門
-  if (passwordInput === '9999') {
-    alert('使用緊急密碼解鎖');
-    setUserRole('owner');
-    setShowPasswordModal(false);
-    return;
-  }
+    if (passwordInput === '9999') {
+      alert('使用緊急密碼解鎖');
+      setUserRole('owner');
+      setShowPasswordModal(false);
+      return;
+    }
 
-  alert('密碼錯誤！請輸入正確的店長或員工密碼');
-};
+    alert('密碼錯誤！請輸入正確的店長或員工密碼');
+  };
 
   const handleSetPassword = async () => {
     setAdminPassword(newPasswordInput);
@@ -5719,17 +5799,17 @@ const handleUnlockConfirm = () => {
     if (userRole !== 'owner' && userRole !== 'manager') return;
 
     if (type === 'ingredient') {
-      const usedInRecipes = recipes.filter(r => 
-        r.ingredients && r.ingredients.some(ing => ing.id === id)
+      const usedInRecipes = recipes.filter(
+        (r) => r.ingredients && r.ingredients.some((ing) => ing.id === id)
       );
 
       if (usedInRecipes.length > 0) {
-        const recipeNames = usedInRecipes.map(r => r.nameZh).join(', ');
+        const recipeNames = usedInRecipes.map((r) => r.nameZh).join(', ');
         showAlert(
-          '無法刪除', 
+          '無法刪除',
           `此材料正在被以下酒譜使用中：\n${recipeNames}\n\n請先從酒譜中移除此材料。`
         );
-        return; 
+        return;
       }
     }
 
@@ -5754,6 +5834,58 @@ const handleUnlockConfirm = () => {
     });
   };
 
+  // 修改後的 startEdit：自動補 ID + 自動命名 + 補齊預設欄位
+  const startEdit = (mode, item) => {
+    setEditorMode(mode);
+
+    if (item) {
+      if (!item.id) {
+        const draftCount = recipes.filter(
+          (r) => r.nameZh && r.nameZh.startsWith('草稿')
+        ).length;
+        const autoName = `草稿 ${String(draftCount + 1).padStart(2, '0')}`;
+
+        setEditingItem({
+          ...item,
+          id: generateId(),
+          nameZh: item.nameZh || autoName,
+          type: item.type || 'classic',
+          tags: item.tags || [],
+          ingredients: item.ingredients || [],
+        });
+      } else {
+        setEditingItem(item);
+      }
+    } else {
+      const newItem = { id: generateId(), nameZh: '' };
+      if (mode === 'recipe') {
+        Object.assign(newItem, {
+          ingredients: [],
+          type: 'classic',
+          targetCostRate: '',
+          price: '',
+          tags: [],
+        });
+      } else if (mode === 'food') {
+        Object.assign(newItem, {
+          type: 'food',
+          price: '',
+          flavorDescription: '',
+          image: '',
+          category: '',
+        });
+      } else {
+        Object.assign(newItem, {
+          type: 'alcohol',
+          price: 0,
+          volume: 700,
+          subType: '',
+        });
+      }
+      setEditingItem(newItem);
+    }
+  };
+
   const saveItem = async (item, mode) => {
     const db = window.firebase.firestore();
     const col =
@@ -5763,7 +5895,6 @@ const handleUnlockConfirm = () => {
         ? 'foods'
         : 'ingredients';
 
-    // ★ 修復重點：確保所有數值欄位都是數字，避免 NaN
     const cleanItem = {
       ...item,
       price: Number(item.price) || 0,
@@ -5787,66 +5918,6 @@ const handleUnlockConfirm = () => {
       .set(cleanItem);
     setEditorMode(null);
   };
-
-// 修改後的 startEdit：自動補 ID + 自動命名 + 補齊預設欄位
-const startEdit = (mode, item) => {
-  setEditorMode(mode);
-
-  // 如果是「編輯舊資料」或是「從草稿轉過來的資料」
-  if (item) {
-    // 檢查這筆資料有沒有 ID？(沒有 ID = 來自草稿)
-    if (!item.id) {
-      // --- 自動命名邏輯 ---
-      const draftCount = recipes.filter(
-        (r) => r.nameZh && r.nameZh.startsWith('草稿')
-      ).length;
-      const autoName = `草稿 ${String(draftCount + 1).padStart(2, '0')}`;
-
-      setEditingItem({
-        ...item,
-        id: generateId(),
-        // 如果草稿本身沒名字，就用自動產生的「草稿 XX」
-        nameZh: item.nameZh || autoName,
-        // ★ 修復重點：補上預設分類與標籤，防止 Crash
-        type: item.type || 'classic',
-        tags: item.tags || [],
-        ingredients: item.ingredients || [],
-      });
-    } else {
-      // 如果有 ID (舊資料)，直接設定就好
-      setEditingItem(item);
-    }
-  }
-  // 如果是「完全新增」一筆資料 (點擊 + 按鈕)
-  else {
-    const newItem = { id: generateId(), nameZh: '' };
-    if (mode === 'recipe') {
-      Object.assign(newItem, {
-        ingredients: [],
-        type: 'classic',
-        targetCostRate: '',
-        price: '',
-        tags: [], // ★ 確保有 tags
-      });
-    } else if (mode === 'food') {
-      Object.assign(newItem, {
-        type: 'food',
-        price: '',
-        flavorDescription: '',
-        image: '',
-        category: '',
-      });
-    } else {
-      Object.assign(newItem, {
-        type: 'alcohol',
-        price: 0,
-        volume: 700,
-        subType: '',
-      });
-    }
-    setEditingItem(newItem);
-  }
-};
 
   if (!isLoggedIn) return <LoginScreen onLogin={handleLogin} />;
 
@@ -5923,6 +5994,7 @@ const startEdit = (mode, item) => {
             availableBases={availableBases}
             categorySubItems={categorySubItems}
             onAddSubCategory={handleAddSubCategory}
+            onDeleteSubCategory={handleDeleteSubCategory} // ★ Pass delete function
             isReadOnly={isStaff}
           />
         )}
@@ -5938,12 +6010,12 @@ const startEdit = (mode, item) => {
         {activeTab === 'tools' && (
           <div className="h-full flex flex-col overflow-y-auto p-6 space-y-6 pt-20 custom-scrollbar pb-32">
             <div className="text-center">
-            <h2 className="text-xl font-serif text-white flex items-center justify-center gap-2">
-                  Bar Manager Cloud
-                  <span className="text-[10px] bg-amber-900/50 text-amber-500 border border-amber-500/50 px-1.5 py-0.5 rounded font-sans font-bold">
-                    {APP_VERSION}
-                  </span>
-                </h2>
+              <h2 className="text-xl font-serif text-white flex items-center justify-center gap-2">
+                Bar Manager Cloud
+                <span className="text-[10px] bg-amber-900/50 text-amber-500 border border-amber-500/50 px-1.5 py-0.5 rounded font-sans font-bold">
+                  {APP_VERSION}
+                </span>
+              </h2>
               <p className="text-xs text-slate-500">
                 Shop ID: {shopId} /{' '}
                 {userRole === 'manager'
@@ -5954,15 +6026,18 @@ const startEdit = (mode, item) => {
               </p>
             </div>
 
-             <div className="bg-slate-900 p-4 rounded-xl border border-slate-800">
-                <button
-                  onClick={() => setShowHelpModal(true)}
-                  className="w-full flex items-center justify-between text-white font-bold"
-                >
-                   <span className="flex items-center gap-2"><HelpCircle size={20} className="text-amber-500"/> 使用教學 / FAQ</span>
-                   <ChevronLeft size={16} className="rotate-180 text-slate-500"/>
-                </button>
-             </div>
+            <div className="bg-slate-900 p-4 rounded-xl border border-slate-800">
+              <button
+                onClick={() => setShowHelpModal(true)}
+                className="w-full flex items-center justify-between text-white font-bold"
+              >
+                <span className="flex items-center gap-2">
+                  <HelpCircle size={20} className="text-amber-500" /> 使用教學 /
+                  FAQ
+                </span>
+                <ChevronLeft size={16} className="rotate-180 text-slate-500" />
+              </button>
+            </div>
 
             {isOwner && (
               <div className="bg-slate-900 p-4 rounded-xl space-y-4 border border-slate-800">
@@ -5970,25 +6045,36 @@ const startEdit = (mode, item) => {
                   <QrCode size={16} /> 顧客專屬 QR Code
                 </h3>
                 <div className="bg-white p-4 rounded-xl flex flex-col items-center justify-center">
-                   <img
-                     src={`https://api.qrserver.com/v1/create-qr-code/?size=200x200&data=${encodeURIComponent(
-                       window.location.origin + window.location.pathname + '?shop=' + shopId + '&mode=customer'
-                     )}`}
-                     alt="Customer QR"
-                     className="w-48 h-48"
-                   />
+                  <img
+                    src={`https://api.qrserver.com/v1/create-qr-code/?size=200x200&data=${encodeURIComponent(
+                      window.location.origin +
+                        window.location.pathname +
+                        '?shop=' +
+                        shopId +
+                        '&mode=customer'
+                    )}`}
+                    alt="Customer QR"
+                    className="w-48 h-48"
+                  />
                 </div>
                 <div className="text-center">
-                  <p className="text-xs text-slate-500 mb-2">掃描此 QR Code 可直接進入顧客模式</p>
+                  <p className="text-xs text-slate-500 mb-2">
+                    掃描此 QR Code 可直接進入顧客模式
+                  </p>
                   <button
-                     onClick={() => {
-                       const url = window.location.origin + window.location.pathname + '?shop=' + shopId + '&mode=customer';
-                       navigator.clipboard.writeText(url);
-                       alert('連結已複製');
-                     }}
-                     className="text-amber-500 text-xs underline"
+                    onClick={() => {
+                      const url =
+                        window.location.origin +
+                        window.location.pathname +
+                        '?shop=' +
+                        shopId +
+                        '&mode=customer';
+                      navigator.clipboard.writeText(url);
+                      alert('連結已複製');
+                    }}
+                    className="text-amber-500 text-xs underline"
                   >
-                   複製連結
+                    複製連結
                   </button>
                 </div>
               </div>
@@ -6079,8 +6165,7 @@ const startEdit = (mode, item) => {
                     </div>
                   )}
                 </div>
-                
-                {/* 輸入區塊 */}
+
                 <div className="space-y-2 pt-2 border-t border-slate-800">
                   <div className="flex gap-2">
                     <input
@@ -6106,7 +6191,7 @@ const startEdit = (mode, item) => {
                       />
                       設為資深員工 (可編輯)
                     </label>
-                    
+
                     {editingStaffId ? (
                       <div className="flex gap-2">
                         <button
@@ -6214,8 +6299,10 @@ const startEdit = (mode, item) => {
         )}
       </main>
 
-      {/* Overlays */}
-      <HelpModal isOpen={showHelpModal} onClose={() => setShowHelpModal(false)} />
+      <HelpModal
+        isOpen={showHelpModal}
+        onClose={() => setShowHelpModal(false)}
+      />
       <PageIntroModal isOpen={showPageIntro} onClose={handleCloseIntro} />
 
       {showPasswordModal && (
