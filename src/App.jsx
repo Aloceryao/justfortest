@@ -378,7 +378,7 @@ const safeString = (str) => (str || '').toString();
 // ==========================================
 // ★ 版本號設定 (修改這裡會同步更新登入頁與設定頁)
 // ==========================================
-const APP_VERSION = 'v15.3.2 (升級版)';
+const APP_VERSION = 'v15.3.4 (升級版)';
 const safeNumber = (num) => {
   const n = parseFloat(num);
   return isNaN(n) ? 0 : n;
@@ -1582,6 +1582,10 @@ const RecipeListScreen = ({
   userRole,
   onUnlock,
   ingCategories,
+  // ★ 新增接收的參數
+  gridCategories,
+  onAddGridCategory,
+  onDeleteGridCategory,
 }) => {
   const [filterBases, setFilterBases] = useState([]);
   const [filterTags, setFilterTags] = useState([]);
@@ -1597,77 +1601,6 @@ const RecipeListScreen = ({
   const [isGridEditing, setIsGridEditing] = useState(false);
   const [showCatModal, setShowCatModal] = useState(false);
 
-  const [gridCategories, setGridCategories] = useState(() => {
-    try {
-      const saved = localStorage.getItem('bar_grid_cats_v9');
-      if (saved) return JSON.parse(saved);
-    } catch (e) {}
-    return [
-      {
-        id: 'gin',
-        nameZh: 'Gin',
-        nameEn: '琴酒',
-        iconType: 'martini',
-        gradient: 'from-blue-600 to-indigo-700',
-        targetBase: 'Gin 琴酒',
-      },
-      {
-        id: 'whisky',
-        nameZh: 'Whisky',
-        nameEn: '威士忌',
-        iconType: 'whisky',
-        gradient: 'from-amber-600 to-orange-700',
-        targetBase: 'Whisky 威士忌',
-      },
-      {
-        id: 'rum',
-        nameZh: 'Rum',
-        nameEn: '蘭姆酒',
-        iconType: 'highball',
-        gradient: 'from-rose-600 to-pink-700',
-        targetBase: 'Rum 蘭姆酒',
-      },
-      {
-        id: 'tequila',
-        nameZh: 'Tequila',
-        nameEn: '龍舌蘭',
-        iconType: 'shot',
-        gradient: 'from-emerald-600 to-teal-700',
-        targetBase: 'Tequila 龍舌蘭',
-      },
-      {
-        id: 'vodka',
-        nameZh: 'Vodka',
-        nameEn: '伏特加',
-        iconType: 'martini',
-        gradient: 'from-cyan-600 to-blue-700',
-        targetBase: 'Vodka 伏特加',
-      },
-      {
-        id: 'brandy',
-        nameZh: 'Brandy',
-        nameEn: '白蘭地',
-        iconType: 'snifter',
-        gradient: 'from-purple-600 to-violet-700',
-        targetBase: 'Brandy 白蘭地',
-      },
-      {
-        id: 'soft',
-        nameZh: '軟飲',
-        nameEn: 'Soft Drink',
-        iconType: 'soft',
-        gradient: 'from-teal-600 to-emerald-700',
-        targetBase: 'TYPE_SOFT',
-      },
-    ];
-  });
-
-  useEffect(() => {
-    localStorage.setItem(
-      'bar_grid_cats_v9',
-      JSON.stringify(gridCategories)
-    );
-  }, [gridCategories]);
   useEffect(() => {
     if (activeBlock)
       localStorage.setItem('bar_active_grid_v1', JSON.stringify(activeBlock));
@@ -1709,23 +1642,6 @@ const RecipeListScreen = ({
     }
   };
 
-  const handleAddCategory = (newCat) => {
-    if (!newCat.targetBase) {
-      if (
-        newCat.nameZh.includes('軟') ||
-        newCat.nameEn.toLowerCase().includes('soft')
-      ) {
-        newCat.targetBase = 'TYPE_SOFT';
-        newCat.iconType = 'soft';
-      }
-    }
-    setGridCategories([...gridCategories, newCat]);
-  };
-
-  const handleDeleteCategory = (id) => {
-    if (confirm(`確定移除此方塊嗎？`))
-      setGridCategories(gridCategories.filter((c) => c.id !== id));
-  };
   const clearBlockFilter = () => {
     setActiveBlock(null);
     setFilterBases([]);
@@ -1924,14 +1840,14 @@ const RecipeListScreen = ({
       <div className="flex-1 overflow-y-auto custom-scrollbar">
         {showGrid ? (
           <CategoryGrid
-            categories={gridCategories}
-            onSelect={handleBlockSelect}
-            onAdd={() => setShowCatModal(true)}
-            onDelete={handleDeleteCategory}
-            isEditing={isGridEditing}
-            toggleEditing={() => setIsGridEditing(!isGridEditing)}
-            role={userRole}
-          />
+          categories={gridCategories}
+          onSelect={handleBlockSelect}
+          onAdd={() => setShowCatModal(true)}
+          onDelete={onDeleteGridCategory} // ★ 改用傳進來的刪除功能
+          isEditing={isGridEditing}
+          toggleEditing={() => setIsGridEditing(!isGridEditing)}
+          role={userRole}
+        />
         ) : (
           <div className="p-4 space-y-4 pb-32">
             {activeBlock && (
@@ -1981,7 +1897,7 @@ const RecipeListScreen = ({
       <CategoryEditModal
         isOpen={showCatModal}
         onClose={() => setShowCatModal(false)}
-        onSave={handleAddCategory}
+        onSave={onAddGridCategory} // ★ 改用傳進來的新增功能
         availableBases={allSubTypes}
         ingCategories={ingCategories}
       />
@@ -3283,6 +3199,7 @@ const EditorSheet = ({
   showAlert,
   foodCategories,
   setFoodCategories,
+  onAutoCreateGridBlock, // ★ 新增接收這個參數
 }) => {
   const fileInputRef = useRef(null);
   const [addingItem, setAddingItem] = useState(null);
@@ -3309,7 +3226,15 @@ const EditorSheet = ({
       }
 
       if (mode === 'ingredient') setItem({ ...item, subType: val });
-      if (mode === 'recipe') setItem({ ...item, baseSpirit: val });
+      
+      // ★ 修改重點：如果是新增酒譜的「基酒 (Base)」，同時觸發建立首頁方塊
+      if (mode === 'recipe') {
+        setItem({ ...item, baseSpirit: val });
+        // 呼叫主程式傳進來的功能，自動建立方塊
+        if (addingItem === 'base' && onAutoCreateGridBlock) {
+          onAutoCreateGridBlock(val);
+        }
+      }
     }
 
     if (addingItem === 'foodCat') {
@@ -5219,16 +5144,40 @@ function MainAppContent() {
     });
   };
 
-  // ★ 新增：刪除子分類的邏輯
-  const handleDeleteSubCategory = (catId, subCatName) => {
-    setCategorySubItems((prev) => {
-      const currentList = prev[catId] || [];
-      return {
-        ...prev,
-        [catId]: currentList.filter((item) => item !== subCatName),
-      };
+// ★ 修改：強力刪除子分類
+const handleDeleteSubCategory = (catId, subCatName) => {
+  setCategorySubItems((prev) => {
+    const newState = { ...prev };
+    Object.keys(newState).forEach((key) => {
+      if (Array.isArray(newState[key])) {
+        newState[key] = newState[key].filter((item) => item !== subCatName);
+      }
     });
+    return newState;
+  });
+};
+
+// ★ 新增：當編輯酒譜新增基酒時，自動建立首頁的快速篩選方塊
+const handleAutoCreateGridBlock = (newBaseName) => {
+  // 1. 檢查是否已經有這個方塊了 (避免重複)
+  const exists = gridCategories.find(
+    (c) => c.targetBase === newBaseName || c.nameZh === newBaseName
+  );
+  if (exists) return;
+
+  // 2. 建立新方塊物件
+  const newBlock = {
+    id: generateId(),
+    nameZh: newBaseName, // 方塊顯示名稱
+    nameEn: 'Base',      // 預設英文
+    iconType: 'wine',    // 預設圖示
+    gradient: 'from-slate-700 to-slate-800', // 預設顏色
+    targetBase: newBaseName, // 設定篩選目標
   };
+
+  // 3. 更新狀態並存入 LocalStorage (透過 useEffect)
+  setGridCategories([...gridCategories, newBlock]);
+};
 
   const [foodCategories, setFoodCategories] = useState(() => {
     try {
@@ -5255,6 +5204,43 @@ function MainAppContent() {
     );
   }, [foodCategories]);
 
+  // ★ 新增：將 Grid Categories (方塊) 的狀態提升到這裡管理
+  const [gridCategories, setGridCategories] = useState(() => {
+    try {
+      const saved = localStorage.getItem('bar_grid_cats_v9');
+      if (saved) return JSON.parse(saved);
+    } catch (e) {}
+    // 預設值
+    return [
+      { id: 'gin', nameZh: 'Gin', nameEn: '琴酒', iconType: 'martini', gradient: 'from-blue-600 to-indigo-700', targetBase: 'Gin 琴酒' },
+      { id: 'whisky', nameZh: 'Whisky', nameEn: '威士忌', iconType: 'whisky', gradient: 'from-amber-600 to-orange-700', targetBase: 'Whisky 威士忌' },
+      { id: 'rum', nameZh: 'Rum', nameEn: '蘭姆酒', iconType: 'highball', gradient: 'from-rose-600 to-pink-700', targetBase: 'Rum 蘭姆酒' },
+      { id: 'tequila', nameZh: 'Tequila', nameEn: '龍舌蘭', iconType: 'shot', gradient: 'from-emerald-600 to-teal-700', targetBase: 'Tequila 龍舌蘭' },
+      { id: 'vodka', nameZh: 'Vodka', nameEn: '伏特加', iconType: 'martini', gradient: 'from-cyan-600 to-blue-700', targetBase: 'Vodka 伏特加' },
+      { id: 'brandy', nameZh: 'Brandy', nameEn: '白蘭地', iconType: 'snifter', gradient: 'from-purple-600 to-violet-700', targetBase: 'Brandy 白蘭地' },
+      { id: 'soft', nameZh: '軟飲', nameEn: 'Soft Drink', iconType: 'soft', gradient: 'from-teal-600 to-emerald-700', targetBase: 'TYPE_SOFT' },
+    ];
+  });
+
+  useEffect(() => {
+    localStorage.setItem('bar_grid_cats_v9', JSON.stringify(gridCategories));
+  }, [gridCategories]);
+
+  const handleAddGridCategory = (newCat) => {
+    // 自動判斷是否為軟飲
+    if (!newCat.targetBase) {
+      if (newCat.nameZh.includes('軟') || newCat.nameEn.toLowerCase().includes('soft')) {
+        newCat.targetBase = 'TYPE_SOFT';
+        newCat.iconType = 'soft';
+      }
+    }
+    setGridCategories([...gridCategories, newCat]);
+  };
+
+  const handleDeleteGridCategory = (id) => {
+    if (confirm(`確定移除此方塊嗎？`))
+      setGridCategories(gridCategories.filter((c) => c.id !== id));
+  };
   // ★ 修改：加入讀取與儲存功能，讓大分類不會重整後消失
   const [ingCategories, setIngCategories] = useState(() => {
     try {
@@ -5934,7 +5920,7 @@ function MainAppContent() {
       <style>{`:root{color-scheme:dark}.pt-safe{padding-top:env(safe-area-inset-top)}.pb-safe{padding-bottom:env(safe-area-inset-bottom)}.custom-scrollbar::-webkit-scrollbar{width:4px;background:#1e293b}.custom-scrollbar::-webkit-scrollbar-thumb{background:#475569;border-radius:2px}`}</style>
 
       <main className="flex-1 relative overflow-hidden w-full">
-        {activeTab === 'recipes' && (
+      {activeTab === 'recipes' && (
           <RecipeListScreen
             recipes={recipes}
             ingredients={ingredients}
@@ -5951,6 +5937,10 @@ function MainAppContent() {
             isConsumerMode={!canEdit}
             onUnlock={handleUnlockRequest}
             ingCategories={ingCategories}
+            // ★ 新增：將方塊資料傳入首頁
+            gridCategories={gridCategories} 
+            onAddGridCategory={handleAddGridCategory}
+            onDeleteGridCategory={handleDeleteGridCategory}
           />
         )}
 
@@ -6413,6 +6403,7 @@ function MainAppContent() {
         showAlert={showAlert}
         foodCategories={foodCategories}
         setFoodCategories={setFoodCategories}
+        onAutoCreateGridBlock={handleAutoCreateGridBlock} // ★ 新增這行：傳入自動建立方塊的功能
       />
       <ViewerOverlay
         item={viewingItem}
