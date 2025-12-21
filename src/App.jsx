@@ -410,7 +410,7 @@ const safeString = (str) => (str || '').toString();
 // ==========================================
 // ★ 版本號設定 (修改這裡會同步更新登入頁與設定頁)
 // ==========================================
-const APP_VERSION = 'v15.3.5 (升級版)';
+const APP_VERSION = 'v16.0 (完整修復版01)';
 const safeNumber = (num) => {
   const n = parseFloat(num);
   return isNaN(n) ? 0 : n;
@@ -993,11 +993,12 @@ const ChipSelector = ({ title, options, selected, onSelect }) => {
 };
 
 const CategoryEditModal = ({
-  isOpen,
+  isOpen, // ★★★ 關鍵：這裡一定要有 isOpen，不然會報錯！
   onClose,
   onSave,
   availableBases,
   ingCategories,
+  initialData, // ★ 還有這一個也要有
 }) => {
   const [nameZh, setNameZh] = useState('');
   const [nameEn, setNameEn] = useState('');
@@ -1009,18 +1010,30 @@ const CategoryEditModal = ({
 
   useEffect(() => {
     if (isOpen) {
-      setNameZh('');
-      setNameEn('');
-      setTargetBase('');
+      if (initialData) {
+        // ★ 如果有舊資料，就填入
+        setNameZh(initialData.nameZh || '');
+        setNameEn(initialData.nameEn || '');
+        setIconType(initialData.iconType || 'whisky');
+        setGradient(initialData.gradient || 'from-slate-600 to-gray-700');
+        setTargetBase(initialData.targetBase || '');
+      } else {
+        // ★ 如果是新增，就清空
+        setNameZh('');
+        setNameEn('');
+        setTargetBase('');
+        setIconType('whisky');
+        setGradient('from-slate-600 to-gray-700');
+      }
     }
-  }, [isOpen]);
+  }, [isOpen, initialData]);
 
   if (!isOpen) return null;
 
   const handleSubmit = () => {
     if (!nameZh) return;
     onSave({
-      id: generateId(),
+      id: initialData ? initialData.id : generateId(),
       nameZh,
       nameEn,
       iconType,
@@ -1072,7 +1085,9 @@ const CategoryEditModal = ({
     <div className="fixed inset-0 z-[60] flex items-center justify-center p-4 bg-black/80 backdrop-blur-sm animate-fade-in">
       <div className="bg-slate-900 border border-slate-700 w-full max-w-sm rounded-2xl shadow-2xl p-6 animate-scale-in flex flex-col max-h-[90vh]">
         <div className="flex justify-between items-center mb-6 shrink-0">
-          <h3 className="text-xl font-bold text-white">新增分類色塊</h3>
+          <h3 className="text-xl font-bold text-white">
+            {initialData ? '編輯分類色塊' : '新增分類色塊'}
+          </h3>
           <button onClick={onClose}>
             <X className="text-slate-400" />
           </button>
@@ -1118,6 +1133,9 @@ const CategoryEditModal = ({
                   ))}
               </optgroup>
             </select>
+            <p className="text-[10px] text-slate-500 mt-1">
+              選定後，點擊方塊只會顯示該分類的材料。
+            </p>
           </div>
 
           <div>
@@ -1183,7 +1201,7 @@ const CategoryEditModal = ({
                 />
               ))}
               
-              {/* ★ 新增：自訂顏色選擇器 */}
+              {/* 自訂顏色選擇器 */}
               <div className="relative group">
                 <input
                     type="color"
@@ -1209,13 +1227,16 @@ const CategoryEditModal = ({
           onClick={handleSubmit}
           className="w-full bg-amber-600 text-white font-bold py-3 rounded-xl mt-6 shrink-0"
         >
-          建立分類
+          {initialData ? '儲存修改' : '建立分類'}
         </button>
       </div>
     </div>
   );
 };
 
+// ==========================================
+// ★ 補回遺失的 CategoryGrid 元件
+// ==========================================
 const CategoryGrid = ({
   categories,
   onSelect,
@@ -1225,77 +1246,81 @@ const CategoryGrid = ({
   toggleEditing,
   role,
 }) => {
+  const canEdit = role === 'owner' || role === 'manager';
+
   return (
-    <div className="p-4 animate-fade-in">
-      <div className="flex justify-between items-center mb-4">
-        <h3 className="text-sm font-bold text-slate-500 uppercase tracking-wider">
-          快速分類
+    <div className="px-4 py-2 mb-2 animate-fade-in">
+      <div className="flex justify-between items-center mb-3 px-1">
+        <h3 className="text-sm font-bold text-slate-400 uppercase tracking-wider">
+          快速篩選
         </h3>
-        {(role === 'owner' || role === 'manager') && (
+        {canEdit && (
           <button
             onClick={toggleEditing}
             className={`text-xs px-2 py-1 rounded border transition-colors ${
               isEditing
-                ? 'bg-slate-700 text-white border-slate-500'
-                : 'text-slate-500 border-transparent hover:text-slate-300'
+                ? 'bg-amber-600 border-amber-500 text-white'
+                : 'border-slate-700 text-slate-500 hover:text-white'
             }`}
           >
             {isEditing ? '完成' : '編輯'}
           </button>
         )}
       </div>
-      <div className="grid grid-cols-2 md:grid-cols-3 gap-4">
+      <div className="grid grid-cols-2 gap-3">
         {categories.map((cat, idx) => {
-            // ★ 修改：判斷是預設漸層 (Tailwind Class) 還是自訂顏色 (Hex Code)
-            const isCustomColor = cat.gradient && cat.gradient.startsWith('#');
-            const styleObj = isCustomColor 
-                ? { background: `linear-gradient(135deg, ${cat.gradient}, #1a1a1a)` } 
-                : {};
-            const classStr = isCustomColor 
-                ? '' 
-                : `bg-gradient-to-br ${cat.gradient || 'from-slate-700 to-slate-800'}`;
+          const styleObj = cat.gradient.startsWith('#')
+            ? { backgroundColor: cat.gradient }
+            : {};
+          const classStr = cat.gradient.startsWith('#')
+            ? ''
+            : `bg-gradient-to-br ${cat.gradient}`;
 
-            return (
-              <div
-                key={cat.id || idx}
-                onClick={() => !isEditing && onSelect(cat)}
-                style={styleObj} // 套用自訂顏色
-                className={`relative h-28 rounded-2xl ${classStr} shadow-lg overflow-hidden cursor-pointer hover:scale-[1.02] active:scale-95 transition-all border border-white/10 group`}
-              >
-                <div className="absolute -right-2 -bottom-4 w-24 h-24 text-white opacity-20 transform rotate-[-15deg] group-hover:scale-110 group-hover:opacity-30 transition-all duration-500 pointer-events-none">
-                  <CategoryIcon iconType={cat.iconType} />
-                </div>
-                <div className="absolute inset-0 p-4 flex flex-col justify-center items-center z-10">
-                  <span className="text-white font-bold text-xl text-center drop-shadow-md tracking-wide">
-                    {cat.nameZh}
-                  </span>
-                  <span className="text-[10px] text-white/70 font-medium uppercase tracking-wider mt-1 border-t border-white/20 pt-1 px-2">
-                    {cat.nameEn}
-                  </span>
-                </div>
-                {(role === 'owner' || role === 'manager') && isEditing && (
-                  <button
-                    onClick={(e) => {
-                      e.stopPropagation();
-                      onDelete(cat.id);
-                    }}
-                    className="absolute top-2 right-2 bg-rose-500 text-white rounded-full p-1.5 shadow-md hover:bg-rose-600 animate-scale-in z-20"
-                  >
-                    <X size={14} strokeWidth={3} />
-                  </button>
-                )}
+          return (
+            <div
+              key={cat.id || idx}
+              onClick={() => onSelect(cat)}
+              style={styleObj}
+              className={`relative h-28 rounded-2xl ${classStr} shadow-lg overflow-hidden cursor-pointer hover:scale-[1.02] active:scale-95 transition-all border border-white/10 group`}
+            >
+              {/* ▼ 更有設計感的樣式：放在右下角、放大、稍微旋轉 ▼ */}
+              <div className="absolute -bottom-2 -right-2 opacity-30">
+                <CategoryIcon iconType={cat.iconType} className="w-32 h-32 text-white transform -rotate-12" />
               </div>
-            );
+              {/* 🟢 貼上這一段 (字體加大版) */}
+              <div className="absolute bottom-4 left-4 z-10">
+                <div className="text-white font-bold text-2xl leading-tight shadow-black drop-shadow-md">
+                  {cat.nameZh}
+                </div>
+                <div className="text-white/80 text-sm font-medium uppercase tracking-wider mt-1">
+                  {cat.nameEn}
+                </div>
+              </div>
+              {isEditing && (
+                <button
+                  onClick={(e) => {
+                    e.stopPropagation();
+                    onDelete(cat.id);
+                  }}
+                  className="absolute top-1 right-1 bg-black/40 hover:bg-rose-600 text-white p-1.5 rounded-full backdrop-blur-sm transition-colors z-20"
+                >
+                  <X size={12} />
+                </button>
+              )}
+            </div>
+          );
         })}
-        {(role === 'owner' || role === 'manager') && (
+
+        {/* 新增按鈕 */}
+        {(isEditing || categories.length === 0) && (
           <button
             onClick={onAdd}
-            className="h-28 rounded-2xl bg-slate-800/50 border-2 border-dashed border-slate-700 flex flex-col items-center justify-center text-slate-500 hover:text-white hover:border-slate-500 hover:bg-slate-800 transition-all gap-2 group"
+            className="h-28 rounded-2xl border-2 border-dashed border-slate-700 flex flex-col items-center justify-center gap-2 text-slate-500 hover:text-amber-500 hover:border-amber-500/50 hover:bg-slate-800/50 transition-all group"
           >
-            <div className="p-3 rounded-full bg-slate-800 group-hover:bg-slate-700 transition-colors">
-              <Plus size={24} />
+            <div className="w-10 h-10 rounded-full bg-slate-800 group-hover:bg-slate-700 flex items-center justify-center transition-colors">
+              <Plus size={20} />
             </div>
-            <span className="text-xs font-bold">新增分類</span>
+            <span className="text-xs font-bold">新增</span>
           </button>
         )}
       </div>
@@ -1303,155 +1328,9 @@ const CategoryGrid = ({
   );
 };
 
-const IngredientPickerModal = ({
-  isOpen,
-  onClose,
-  onSelect,
-  ingredients,
-  categories,
-  categorySubItems,
-}) => {
-  const [search, setSearch] = useState('');
-  const [activeCat, setActiveCat] = useState('all');
-  const [activeSubCat, setActiveSubCat] = useState('all');
-
-  useEffect(() => {
-    setActiveSubCat('all');
-  }, [activeCat]);
-  
-  if (!isOpen) return null;
-
-  const currentSubOptions = activeCat !== 'all' && categorySubItems 
-    ? (categorySubItems[activeCat] || []) 
-    : [];
-
-  const filtered = ingredients.filter((i) => {
-    const matchSearch =
-      safeString(i.nameZh).toLowerCase().includes(search.toLowerCase()) ||
-      safeString(i.nameEn).toLowerCase().includes(search.toLowerCase());
-    const matchCat = activeCat === 'all' || i.type === activeCat;
-    
-    let matchSub = true;
-    if (activeCat !== 'all' && activeSubCat !== 'all') {
-      matchSub = i.subType === activeSubCat;
-    }
-    return matchSearch && matchCat && matchSub;
-  });
-
-  return (
-    <div className="fixed inset-0 z-[70] bg-black/90 backdrop-blur-sm flex flex-col animate-fade-in sm:p-10">
-      <div className="bg-slate-950 w-full max-w-lg mx-auto h-full sm:h-auto sm:max-h-[80vh] sm:rounded-2xl flex flex-col border border-slate-800 shadow-2xl overflow-hidden">
-        <div className="px-4 pb-4 pt-12 sm:pt-4 border-b border-slate-800 flex items-center gap-3 shrink-0">
-          <button
-            onClick={onClose}
-            className="p-2 hover:bg-slate-800 rounded-full text-slate-400"
-          >
-            <ChevronLeft />
-          </button>
-          <div className="flex-1 relative">
-            <Search className="absolute left-3 top-2.5 text-slate-500 w-4 h-4" />
-            <input
-              autoFocus
-              value={search}
-              onChange={(e) => setSearch(e.target.value)}
-              className="w-full bg-slate-900 border border-slate-700 rounded-xl py-2 pl-9 pr-4 text-slate-200 outline-none focus:border-amber-500"
-              placeholder="搜尋材料..."
-            />
-          </div>
-        </div>
-        
-        <div className="flex flex-wrap gap-2 p-4 border-b border-slate-800 shrink-0 bg-slate-950">
-          <button
-            onClick={() => setActiveCat('all')}
-            className={`px-3 py-1.5 rounded-full text-xs whitespace-nowrap border transition-colors ${
-              activeCat === 'all'
-                ? 'bg-amber-600 text-white border-amber-600'
-                : 'text-slate-400 border-slate-700 bg-slate-900'
-            }`}
-          >
-            全部
-          </button>
-          {categories.map((c) => (
-            <button
-              key={c.id}
-              onClick={() => setActiveCat(c.id)}
-              className={`px-3 py-1.5 rounded-full text-xs whitespace-nowrap border transition-colors ${
-                activeCat === c.id
-                  ? 'bg-amber-600 text-white border-amber-600'
-                  : 'text-slate-400 border-slate-700 bg-slate-900'
-              }`}
-            >
-              {c.label.split(' ')[0]}
-            </button>
-          ))}
-        </div>
-
-        {activeCat !== 'all' && currentSubOptions.length > 0 && (
-          <div className="flex flex-wrap gap-2 px-4 pb-4 border-b border-slate-800 shrink-0 bg-slate-900/50 animate-slide-up pt-2">
-            <button
-              onClick={() => setActiveSubCat('all')}
-              className={`px-3 py-1.5 rounded-full text-[10px] whitespace-nowrap border transition-colors ${
-                activeSubCat === 'all'
-                  ? 'bg-slate-700 text-white border-slate-500'
-                  : 'text-slate-500 border-slate-800 hover:bg-slate-800'
-              }`}
-            >
-              全部
-            </button>
-            {currentSubOptions.map((b) => (
-              <button
-                key={b}
-                onClick={() => setActiveSubCat(b)}
-                className={`px-3 py-1.5 rounded-full text-[10px] whitespace-nowrap border transition-colors ${
-                  activeSubCat === b
-                    ? 'bg-slate-700 text-white border-slate-500'
-                    : 'text-slate-500 border-slate-800 hover:bg-slate-800'
-                }`}
-              >
-                {b.split(' ')[0]}
-              </button>
-            ))}
-          </div>
-        )}
-
-        <div className="flex-1 overflow-y-auto p-4 space-y-2 custom-scrollbar bg-slate-950">
-          {filtered.map((ing) => (
-            <button
-              key={ing.id}
-              onClick={() => {
-                onSelect(ing.id);
-                onClose();
-              }}
-              className="w-full text-left p-3 bg-slate-900/50 border border-slate-800 rounded-xl hover:border-amber-500/50 transition-all flex justify-between items-center group active:bg-slate-800"
-            >
-              <div>
-                <div className="text-slate-200 font-medium">{ing.nameZh}</div>
-                <div className="text-slate-500 text-xs">{ing.nameEn}</div>
-              </div>
-              <div className="flex items-center gap-2">
-                {ing.type === 'alcohol' && (
-                  <span className="text-[10px] bg-slate-800 text-slate-400 px-1.5 py-0.5 rounded">
-                    {ing.subType ? ing.subType.split(' ')[0] : '基酒'}
-                  </span>
-                )}
-                <Plus
-                  size={16}
-                  className="text-amber-500 opacity-0 group-hover:opacity-100 transition-opacity"
-                />
-              </div>
-            </button>
-          ))}
-          {filtered.length === 0 && (
-            <div className="text-center text-slate-500 py-10">
-              沒有找到相關材料
-            </div>
-          )}
-        </div>
-      </div>
-    </div>
-  );
-};
-
+// ==========================================
+// ★ 補回遺失的 FoodListScreen 元件
+// ==========================================
 const FoodListScreen = ({
   foodItems,
   searchTerm,
@@ -1464,44 +1343,30 @@ const FoodListScreen = ({
   setFoodCategories,
 }) => {
   const [activeCat, setActiveCat] = useState('all');
-  const [isAddingCat, setIsAddingCat] = useState(false);
-  const [newCatName, setNewCatName] = useState('');
-
   const isConsumer = userRole === 'customer';
   const canEdit = userRole === 'owner' || userRole === 'manager';
 
-  const handleAddCategory = () => {
-    if (newCatName.trim()) {
-      const newCat = { id: generateId(), label: newCatName.trim() };
-      setFoodCategories([...foodCategories, newCat]);
-      setNewCatName('');
-      setIsAddingCat(false);
-      setActiveCat(newCat.label);
-    }
-  };
+  const filtered = useMemo(() => {
+    return foodItems.filter((f) => {
+      const matchSearch =
+        safeString(f.nameZh).includes(searchTerm) ||
+        safeString(f.nameEn).toLowerCase().includes(searchTerm.toLowerCase());
+      const matchCat = activeCat === 'all' || f.category === activeCat;
+      return matchSearch && matchCat;
+    });
+  }, [foodItems, searchTerm, activeCat]);
 
+  // 刪除分類功能
   const handleDeleteCategory = (catLabel) => {
-    if (confirm(`確定刪除分類 "${catLabel}" 嗎？`)) {
+    if (confirm(`確定要刪除「${catLabel}」分類嗎？`)) {
       setFoodCategories(foodCategories.filter((c) => c.label !== catLabel));
       if (activeCat === catLabel) setActiveCat('all');
     }
   };
 
-  const filtered = useMemo(() => {
-    let list = foodItems.filter(
-      (f) =>
-        safeString(f.nameZh).includes(searchTerm) ||
-        safeString(f.nameEn).toLowerCase().includes(searchTerm.toLowerCase())
-    );
-    if (activeCat !== 'all') {
-      list = list.filter((f) => f.category === activeCat);
-    }
-    return list;
-  }, [foodItems, searchTerm, activeCat]);
-
   return (
     <div className="h-full flex flex-col w-full bg-slate-950">
-      <div className="shrink-0 bg-slate-950/95 backdrop-blur z-20 border-b border-slate-800 shadow-md pt-safe">
+      <div className="shrink-0 bg-slate-950/95 backdrop-blur z-20 border-b border-slate-800 shadow-md pt-safe pb-2">
         <div className="px-4 py-3 flex gap-2 w-full items-center">
           <div className="flex-1 relative">
             <Search className="absolute left-3 top-2.5 text-slate-500 w-4 h-4" />
@@ -1530,35 +1395,36 @@ const FoodListScreen = ({
             )
           )}
         </div>
-
-        <div className="flex flex-wrap gap-2 px-4 pb-2 w-full">
+        
+        {/* 餐點分類選單 */}
+        <div className="flex overflow-x-auto gap-2 px-4 pb-2 no-scrollbar">
           <button
             onClick={() => setActiveCat('all')}
-            className={`whitespace-nowrap px-4 py-2 rounded-full text-sm font-bold transition-all select-none ${
+            className={`whitespace-nowrap px-4 py-1.5 rounded-full text-xs font-bold border transition-colors ${
               activeCat === 'all'
-                ? 'bg-amber-600 text-white shadow'
-                : 'bg-slate-800 text-slate-400 hover:bg-slate-700'
+                ? 'bg-amber-600 text-white border-amber-600'
+                : 'border-slate-700 text-slate-400 hover:text-white'
             }`}
           >
             全部
           </button>
-          {foodCategories.map((cat) => (
-            <div key={cat.id} className="relative group">
+          {foodCategories.map((c) => (
+            <div key={c.id} className="relative group">
               <button
-                onClick={() => setActiveCat(cat.label)}
-                className={`whitespace-nowrap px-4 py-2 rounded-full text-sm font-bold transition-all pr-5 select-none ${
-                  activeCat === cat.label
-                    ? 'bg-slate-700 text-white border border-amber-500/50 shadow'
-                    : 'bg-slate-800 text-slate-400 hover:bg-slate-700'
+                onClick={() => setActiveCat(c.label)}
+                className={`whitespace-nowrap px-4 py-1.5 rounded-full text-xs font-bold border transition-colors ${
+                  activeCat === c.label
+                    ? 'bg-amber-600 text-white border-amber-600'
+                    : 'border-slate-700 text-slate-400 hover:text-white'
                 }`}
               >
-                {cat.label}
+                {c.label}
               </button>
               {canEdit && (
                 <button
                   onClick={(e) => {
                     e.stopPropagation();
-                    handleDeleteCategory(cat.label);
+                    handleDeleteCategory(c.label);
                   }}
                   className="absolute -top-1 -right-1 bg-rose-600 text-white rounded-full p-0.5 w-4 h-4 flex items-center justify-center opacity-0 group-hover:opacity-100 transition-opacity text-[8px]"
                 >
@@ -1567,39 +1433,10 @@ const FoodListScreen = ({
               )}
             </div>
           ))}
-          {canEdit &&
-            (isAddingCat ? (
-              <div className="flex items-center bg-slate-800 rounded-full px-2 py-1 border border-slate-600 animate-fade-in">
-                <input
-                  autoFocus
-                  className="bg-transparent text-sm text-white w-20 outline-none"
-                  placeholder="分類名稱"
-                  value={newCatName}
-                  onChange={(e) => setNewCatName(e.target.value)}
-                  onKeyDown={(e) => e.key === 'Enter' && handleAddCategory()}
-                  onBlur={() => {
-                    if (!newCatName) setIsAddingCat(false);
-                  }}
-                />
-                <button
-                  onClick={handleAddCategory}
-                  className="text-amber-500 ml-1"
-                >
-                  <Check size={16} />
-                </button>
-              </div>
-            ) : (
-              <button
-                onClick={() => setIsAddingCat(true)}
-                className="p-2 bg-slate-800 rounded-full text-slate-500 hover:text-white hover:bg-slate-700"
-              >
-                <Plus size={16} />
-              </button>
-            ))}
         </div>
       </div>
 
-      <div className="flex-1 overflow-y-auto p-4 space-y-4 pb-32 custom-scrollbar">
+      <div className="flex-1 overflow-y-auto p-4 pb-32 custom-scrollbar space-y-4">
         {filtered.length > 0 ? (
           filtered.map((item) => (
             <RecipeCard
@@ -1611,9 +1448,9 @@ const FoodListScreen = ({
             />
           ))
         ) : (
-          <div className="text-center py-20 text-slate-500 flex flex-col items-center">
-            <Utensils size={48} className="mb-4 opacity-20" />
-            <p>尚無餐點</p>
+          <div className="text-center py-20 text-slate-500">
+            <Utensils size={48} className="mx-auto mb-4 opacity-20" />
+            <p>沒有找到餐點</p>
           </div>
         )}
       </div>
@@ -1639,6 +1476,8 @@ const RecipeListScreen = ({
   gridCategories,
   onAddGridCategory,
   onDeleteGridCategory,
+  // ★★★ 請補上這一個 (記得加逗號) ★★★
+  onUpdateGridCategory,
 }) => {
   const [filterBases, setFilterBases] = useState([]);
   const [filterTags, setFilterTags] = useState([]);
@@ -1653,6 +1492,28 @@ const RecipeListScreen = ({
   });
   const [isGridEditing, setIsGridEditing] = useState(false);
   const [showCatModal, setShowCatModal] = useState(false);
+  const [editingBlockData, setEditingBlockData] = useState(null); // ★ 新增
+  // ★ 補回遺失的功能：點擊方塊的行為
+  const handleBlockSelect = (cat) => {
+    // 如果正在編輯模式，點擊方塊 = 開啟編輯視窗
+    if (isGridEditing) {
+      setEditingBlockData(cat); // 設定要編輯的資料
+      setShowCatModal(true);    // 打開視窗
+      return;
+    }
+
+    // --- 以下是原本的篩選邏輯 ---
+    setActiveBlock(cat);
+    const target = cat.targetBase;
+    if (target && !target.startsWith('TYPE_')) {
+      if (allSubTypes.includes(target)) setFilterBases([target]);
+    } else if (!target) {
+      const baseMatch = allSubTypes.find(
+        (b) => b.includes(cat.nameZh) || b.includes(cat.nameEn)
+      );
+      if (baseMatch) setFilterBases([baseMatch]);
+    }
+  };
 
   useEffect(() => {
     if (activeBlock)
@@ -1681,19 +1542,6 @@ const RecipeListScreen = ({
     // 使用 Set 自動過濾重複值
     return [...new Set(list)];
   }, [categorySubItems, ingCategories]);
-
-  const handleBlockSelect = (cat) => {
-    setActiveBlock(cat);
-    const target = cat.targetBase;
-    if (target && !target.startsWith('TYPE_')) {
-      if (allSubTypes.includes(target)) setFilterBases([target]);
-    } else if (!target) {
-      const baseMatch = allSubTypes.find(
-        (b) => b.includes(cat.nameZh) || b.includes(cat.nameEn)
-      );
-      if (baseMatch) setFilterBases([baseMatch]);
-    }
-  };
 
   const clearBlockFilter = () => {
     setActiveBlock(null);
@@ -1892,15 +1740,20 @@ const RecipeListScreen = ({
       </div>
       <div className="flex-1 overflow-y-auto custom-scrollbar">
         {showGrid ? (
-          <CategoryGrid
-          categories={gridCategories}
-          onSelect={handleBlockSelect}
-          onAdd={() => setShowCatModal(true)}
-          onDelete={onDeleteGridCategory} // ★ 改用傳進來的刪除功能
-          isEditing={isGridEditing}
-          toggleEditing={() => setIsGridEditing(!isGridEditing)}
-          role={userRole}
-        />
+         <CategoryGrid
+         categories={gridCategories}
+         onSelect={handleBlockSelect}
+         // ▼▼▼ 修改重點在這裡 ▼▼▼
+         onAdd={() => {
+           setEditingBlockData(null); // 先清空舊資料 (這步很重要！)
+           setShowCatModal(true);     // 再打開視窗
+         }}
+         // ▲▲▲ 修改結束 ▲▲▲
+         onDelete={onDeleteGridCategory}
+         isEditing={isGridEditing}
+         toggleEditing={() => setIsGridEditing(!isGridEditing)}
+         role={userRole}
+       />
         ) : (
           <div className="p-4 space-y-4 pb-32">
             {activeBlock && (
@@ -1949,10 +1802,20 @@ const RecipeListScreen = ({
       </div>
       <CategoryEditModal
         isOpen={showCatModal}
-        onClose={() => setShowCatModal(false)}
-        onSave={onAddGridCategory} // ★ 改用傳進來的新增功能
+        onClose={() => {
+          setShowCatModal(false);
+          setEditingBlockData(null); // 關閉時清空，避免下次新增時殘留
+        }}
+        onSave={(data) => {
+          if (editingBlockData) {
+            onUpdateGridCategory(data); // 如果有舊資料，就是更新
+          } else {
+            onAddGridCategory(data);    // 否則就是新增
+          }
+        }}
         availableBases={allSubTypes}
         ingCategories={ingCategories}
+        initialData={editingBlockData} // ★ 2. 關鍵：把舊資料傳進去
       />
     </div>
   );
@@ -2881,6 +2744,127 @@ const InventoryScreen = ({
           </div>
         </div>
       )}
+    </div>
+  );
+};
+
+// ==========================================
+// ★ 補回遺失的 IngredientPickerModal 元件
+// ==========================================
+const IngredientPickerModal = ({
+  isOpen,
+  onClose,
+  onSelect,
+  ingredients,
+  categories, // 接收分類
+  availableBases,
+}) => {
+  const [searchTerm, setSearchTerm] = useState('');
+  const [filterType, setFilterType] = useState('all');
+
+  if (!isOpen) return null;
+
+  // 取得所有不重複的子分類 (用於篩選)
+  const subTypes = useMemo(() => {
+    const list = ingredients
+      .map((i) => i.subType)
+      .filter((t) => t && t.trim() !== '');
+    return [...new Set(list)];
+  }, [ingredients]);
+
+  const filtered = ingredients.filter((ing) => {
+    const matchSearch =
+      safeString(ing.nameZh).includes(searchTerm) ||
+      safeString(ing.nameEn).toLowerCase().includes(searchTerm.toLowerCase());
+    
+    // 簡單的分類篩選邏輯
+    let matchType = true;
+    if (filterType !== 'all') {
+      if (filterType === 'alcohol') matchType = ing.type === 'alcohol';
+      else if (filterType === 'soft') matchType = ing.type === 'soft';
+      else if (filterType === 'other') matchType = ing.type === 'other';
+      else matchType = ing.subType === filterType; // 支援子分類篩選
+    }
+
+    return matchSearch && matchType;
+  });
+
+  return (
+    <div className="fixed inset-0 z-[70] flex items-center justify-center p-4 bg-black/80 backdrop-blur-sm animate-fade-in">
+      <div className="bg-slate-900 border border-slate-700 w-full max-w-md rounded-2xl shadow-2xl flex flex-col max-h-[85vh] animate-scale-in">
+        <div className="p-4 border-b border-slate-800 flex justify-between items-center shrink-0">
+          <h3 className="text-lg font-bold text-white">選擇材料</h3>
+          <button onClick={onClose} className="p-2 bg-slate-800 rounded-full text-slate-400">
+            <X size={20} />
+          </button>
+        </div>
+        
+        <div className="p-4 space-y-3 shrink-0 bg-slate-900 z-10">
+          <div className="relative">
+            <Search className="absolute left-3 top-2.5 text-slate-500 w-4 h-4" />
+            <input
+              value={searchTerm}
+              onChange={(e) => setSearchTerm(e.target.value)}
+              placeholder="搜尋材料..."
+              className="w-full bg-slate-800 text-white pl-9 py-2 rounded-xl text-sm outline-none focus:border-amber-500 border border-slate-700"
+              autoFocus
+            />
+          </div>
+          {/* 快速分類按鈕 */}
+          <div className="flex gap-2 overflow-x-auto no-scrollbar pb-1">
+            <button
+              onClick={() => setFilterType('all')}
+              className={`whitespace-nowrap px-3 py-1.5 rounded-lg text-xs border ${
+                filterType === 'all' 
+                ? 'bg-amber-600 border-amber-600 text-white' 
+                : 'border-slate-700 text-slate-400'
+              }`}
+            >
+              全部
+            </button>
+            {categories && categories.map(c => (
+               <button
+               key={c.id}
+               onClick={() => setFilterType(c.id)}
+               className={`whitespace-nowrap px-3 py-1.5 rounded-lg text-xs border ${
+                 filterType === c.id 
+                 ? 'bg-slate-700 border-slate-500 text-white' 
+                 : 'border-slate-700 text-slate-400'
+               }`}
+             >
+               {c.label}
+             </button>
+            ))}
+          </div>
+        </div>
+
+        <div className="flex-1 overflow-y-auto p-4 pt-0 space-y-2 custom-scrollbar">
+          {filtered.length > 0 ? (
+            filtered.map((ing) => (
+              <button
+                key={ing.id}
+                onClick={() => {
+                  onSelect(ing.id);
+                  onClose();
+                }}
+                className="w-full text-left p-3 rounded-xl bg-slate-800 border border-slate-700 hover:border-amber-500 flex justify-between items-center group transition-colors"
+              >
+                <div>
+                  <div className="text-white font-medium text-sm">{ing.nameZh}</div>
+                  <div className="text-xs text-slate-500">{ing.nameEn}</div>
+                </div>
+                <div className="text-amber-500 opacity-0 group-hover:opacity-100 transition-opacity">
+                  <Plus size={18} />
+                </div>
+              </button>
+            ))
+          ) : (
+            <div className="text-center text-slate-500 py-8 text-sm">
+              沒有找到相關材料
+            </div>
+          )}
+        </div>
+      </div>
     </div>
   );
 };
@@ -4477,10 +4461,10 @@ const ViewerOverlay = ({
   isConsumerMode,
 }) => {
   if (!item) return null;
-  
+
   // 計算數值 (包含原液與融水)
   const stats = calculateRecipeStats(item, ingredients);
-  
+
   const isSingle = item.type === 'single' || item.isIngredient;
   const isFood = item.type === 'food';
 
@@ -4492,255 +4476,259 @@ const ViewerOverlay = ({
       />
       <div className="relative w-full md:w-[600px] bg-slate-950 h-full shadow-2xl flex flex-col animate-slide-up overflow-hidden">
         
-        {/* ========================================== */}
-        {/* 1. 上方圖片區 (h-[500px] 大圖) */}
-        {/* ========================================== */}
-        <div className="relative h-[500px] shrink-0">
-          <AsyncImage
-            imageId={item.image}
-            alt={item.nameZh}
-            className="w-full h-full object-cover"
-          />
-          {/* 漸層遮罩：確保文字清楚 */}
-          <div className="absolute inset-0 bg-gradient-to-t from-slate-950 via-slate-950/20 to-transparent"></div>
+        {/* Scroll Container (包住圖片 + 內容) */}
+        <div className="flex-1 overflow-y-auto custom-scrollbar relative">
+          
+          {/* 1. 圖片區 */}
+          <div className="relative h-[45vh] min-h-[350px] md:h-[500px] w-full shrink-0">
+            <AsyncImage
+              imageId={item.image}
+              alt={item.nameZh}
+              className="w-full h-full object-cover"
+            />
+            {/* 漸層遮罩 */}
+            <div className="absolute inset-0 bg-gradient-to-t from-slate-950 via-slate-950/20 to-transparent"></div>
 
-          {/* 返回按鈕 */}
-          <button
-            onClick={onClose}
-            className="absolute top-12 left-4 z-50 p-2 bg-black/30 backdrop-blur rounded-full text-white hover:bg-white/20 transition shadow-lg"
-            style={{ marginTop: 'env(safe-area-inset-top)' }}
-          >
-            <ChevronLeft size={24} />
-          </button>
+            {/* 返回按鈕 */}
+            <button
+              onClick={onClose}
+              className="absolute top-4 left-4 z-50 p-2 bg-black/30 backdrop-blur rounded-full text-white hover:bg-white/20 transition shadow-lg mt-[env(safe-area-inset-top)]"
+            >
+              <ChevronLeft size={24} />
+            </button>
 
-          {/* ★★★ 標題與標籤區 (壓在圖片左下角) ★★★ */}
-          <div className="absolute bottom-0 left-0 p-6 w-full z-10">
-            {/* 第一排：標籤群 (含風味標籤) */}
-            <div className="flex flex-wrap gap-2 mb-3">
-              {/* 餐點/單品標籤 */}
-              {isFood && (
-                <span className="text-[10px] text-emerald-200 bg-emerald-900/60 backdrop-blur px-2 py-0.5 rounded border border-emerald-500/30">
-                  {item.category || '餐點'}
-                </span>
-              )}
-              {isSingle ? (
-                <span className="text-[10px] text-purple-200 bg-purple-900/60 backdrop-blur px-2 py-0.5 rounded border border-purple-500/30">
-                  Single 單品
-                </span>
-              ) : (
-                item.baseSpirit && (
-                  <span className="text-[10px] text-blue-200 bg-blue-900/60 backdrop-blur px-2 py-0.5 rounded border border-blue-500/30">
-                    {item.baseSpirit}
+            {/* 標題與標籤區 */}
+            <div className="absolute bottom-0 left-0 p-6 w-full z-10">
+              <div className="flex flex-wrap gap-2 mb-3">
+                {isFood && (
+                  <span className="text-[10px] text-emerald-200 bg-emerald-900/60 backdrop-blur px-2 py-0.5 rounded border border-emerald-500/30">
+                    {item.category || '餐點'}
                   </span>
-                )
-              )}
-              {!isSingle && !isFood && (
-                <span className="text-[10px] text-amber-200 bg-amber-900/60 backdrop-blur px-2 py-0.5 rounded border border-amber-500/30">
-                  {item.technique}
-                </span>
-              )}
-              
-              {/* ★ 新增：風味標籤移到這裡 (半透明白色質感) */}
-              {item.tags?.map((tag) => (
-                <span
-                  key={tag}
-                  className="text-[10px] text-white bg-white/10 backdrop-blur px-2 py-0.5 rounded border border-white/20"
-                >
-                  #{tag}
-                </span>
-              ))}
-            </div>
-
-            {/* 第二排：酒名 */}
-            <h1 className="text-3xl font-serif font-bold text-white mb-1 drop-shadow-md">
-              {item.nameZh}
-            </h1>
-            <p className="text-slate-300 font-medium text-lg opacity-90 drop-shadow-sm">
-              {item.nameEn}
-            </p>
-          </div>
-        </div>
-
-        {/* ========================================== */}
-        {/* 下方內容區 (可滑動) */}
-        {/* ========================================== */}
-        <div className="flex-1 overflow-y-auto custom-scrollbar bg-slate-950">
-          <div className="p-6 space-y-6 pb-8">
-            
-            {/* 2. 數據條 (Data Bar) */}
-            {!isSingle && (
-              <div className="flex justify-between items-center bg-slate-900/50 p-4 rounded-2xl border border-slate-800/50 backdrop-blur-sm">
-                {!isFood && (
-                  <div className="text-center">
-                    <div className="text-[10px] text-slate-500 uppercase tracking-wider mb-1">
-                      ABV (原液｜含水)
-                    </div>
-                    <div className="text-lg font-bold text-amber-500 flex items-center justify-center gap-1">
-                      {stats.dilution > 0 ? (
-                        <>
-                          <span>{stats.rawAbv.toFixed(1)}%</span>
-                          <span className="text-slate-600 mx-1">|</span>
-                          <span>{stats.finalAbv.toFixed(1)}%</span>
-                        </>
-                      ) : (
-                        <span>{stats.finalAbv.toFixed(1)}%</span>
-                      )}
-                    </div>
-                  </div>
                 )}
-                
-                {!isConsumerMode && !isFood && (
-                  <>
-                    <div className="w-px h-8 bg-slate-800 mx-2"></div>
+                {isSingle ? (
+                  <span className="text-[10px] text-purple-200 bg-purple-900/60 backdrop-blur px-2 py-0.5 rounded border border-purple-500/30">
+                    Single 單品
+                  </span>
+                ) : (
+                  item.baseSpirit && (
+                    <span className="text-[10px] text-blue-200 bg-blue-900/60 backdrop-blur px-2 py-0.5 rounded border border-blue-500/30">
+                      {item.baseSpirit}
+                    </span>
+                  )
+                )}
+                {!isSingle && !isFood && (
+                  <span className="text-[10px] text-amber-200 bg-amber-900/60 backdrop-blur px-2 py-0.5 rounded border border-amber-500/30">
+                    {item.technique}
+                  </span>
+                )}
+                {item.tags?.map((tag) => (
+                  <span
+                    key={tag}
+                    className="text-[10px] text-white bg-white/10 backdrop-blur px-2 py-0.5 rounded border border-white/20"
+                  >
+                    #{tag}
+                  </span>
+                ))}
+              </div>
+
+              <h1 className="text-3xl font-serif font-bold text-white mb-1 drop-shadow-md">
+                {item.nameZh}
+              </h1>
+              <p className="text-slate-300 font-medium text-lg opacity-90 drop-shadow-sm">
+                {item.nameEn}
+              </p>
+            </div>
+          </div>
+
+          {/* 2. 內容區 */}
+          <div className="bg-slate-950 min-h-[50vh]">
+            <div className="p-6 space-y-6 pb-20">
+              
+              {/* 數據條 */}
+              {!isSingle && (
+                <div className="flex justify-between items-center bg-slate-900/50 p-4 rounded-2xl border border-slate-800/50 backdrop-blur-sm">
+                  {!isFood && (
                     <div className="text-center">
                       <div className="text-[10px] text-slate-500 uppercase tracking-wider mb-1">
-                        成本率
+                        ABV (原液｜含水)
                       </div>
-                      <div
-                        className={`text-xl font-bold ${
-                          stats.costRate > 30
-                            ? 'text-rose-400'
-                            : 'text-emerald-400'
-                        }`}
-                      >
-                        {stats.costRate.toFixed(0)}%
-                      </div>
-                    </div>
-                  </>
-                )}
-                
-                {(isFood || !isConsumerMode) && (
-                  <div className="w-px h-8 bg-slate-800 mx-2"></div>
-                )}
-                
-                <div className="text-center flex-1">
-                  <div className="text-[10px] text-slate-500 uppercase tracking-wider mb-1">
-                    售價
-                  </div>
-                  <div className="text-xl font-bold text-slate-200 font-mono">
-                    ${item.price || stats.price}
-                  </div>
-                </div>
-              </div>
-            )}
-
-            {/* 3. 風味描述 (放在數據條正下方) */}
-            {item.flavorDescription && (
-              <div className="bg-amber-900/10 border-l-2 border-amber-500/50 p-4 rounded-r-xl">
-                <p className="text-amber-100/90 italic text-sm leading-relaxed">
-                  "{item.flavorDescription}"
-                </p>
-              </div>
-            )}
-
-            {/* 單品價格表 (特殊區塊) */}
-            {isSingle && !isConsumerMode && <PricingTable recipe={item} />}
-            {isSingle && isConsumerMode && (
-              <div className="grid grid-cols-3 gap-2 w-full text-center bg-slate-900/50 p-4 rounded-2xl border border-slate-800/50">
-                {item.priceShot && (
-                  <div className="p-2 border border-slate-700 rounded-lg">
-                    <div className="text-[10px] text-slate-400">Shot</div>
-                    <div className="text-amber-400 font-bold">${item.priceShot}</div>
-                  </div>
-                )}
-                {item.priceGlass && (
-                  <div className="p-2 border border-amber-500/30 rounded-lg shadow-sm shadow-amber-500/10">
-                    <div className="text-[10px] text-amber-500 font-bold">Glass</div>
-                    <div className="text-amber-400 font-bold text-lg">${item.priceGlass}</div>
-                  </div>
-                )}
-                {item.priceBottle && (
-                  <div className="p-2 border border-slate-700 rounded-lg">
-                    <div className="text-[10px] text-slate-400">Bottle</div>
-                    <div className="text-amber-400 font-bold">${item.priceBottle}</div>
-                  </div>
-                )}
-              </div>
-            )}
-
-            {/* 4. 材料列表 */}
-            {!isSingle && !isFood && (
-              <div className="mt-4">
-                <h3 className="text-xs font-bold text-slate-500 uppercase tracking-wider mb-3 flex items-center gap-2">
-                  <Layers size={14} /> 材料 Ingredients
-                </h3>
-                <div className="space-y-3 pl-1">
-                  {item.ingredients.map((ingItem, idx) => {
-                    const ing = ingredients.find((i) => i.id === ingItem.id);
-                    return (
-                      <div
-                        key={idx}
-                        className="flex justify-between items-center py-2 border-b border-slate-800/50"
-                      >
-                        <div className="flex-1">
-                          <span className="text-slate-200 font-medium text-base">
-                            {ing?.nameZh || '未知材料'}
-                          </span>
-                          <span className="block text-xs text-slate-500">
-                             {ing?.nameEn}
-                          </span>
-                        </div>
-                        {!isConsumerMode && (
-                          <span className="text-amber-500 font-mono font-bold text-lg">
-                            {ingItem.amount} <span className="text-xs font-normal text-amber-500/70">ml</span>
-                          </span>
+                      <div className="text-lg font-bold text-amber-500 flex items-center justify-center gap-1">
+                        {stats.dilution > 0 ? (
+                          <>
+                            <span>{stats.rawAbv.toFixed(1)}%</span>
+                            <span className="text-slate-600 mx-1">|</span>
+                            <span>{stats.finalAbv.toFixed(1)}%</span>
+                          </>
+                        ) : (
+                          <span>{stats.finalAbv.toFixed(1)}%</span>
                         )}
                       </div>
-                    );
-                  })}
-                  {item.garnish && (
-                    <div className="flex justify-between items-center py-2 border-b border-slate-800/50 mt-2">
-                      <span className="text-slate-400 italic text-sm">
-                        Garnish (裝飾)
-                      </span>
-                      <span className="text-slate-300 font-medium">
-                        {item.garnish}
-                      </span>
                     </div>
                   )}
-                  {/* 融水顯示 */}
-                  {!isConsumerMode && stats.dilution > 0 && (
-                    <div className="flex justify-between items-center py-2 border-b border-slate-800/50">
-                      <span className="text-blue-400/70 italic text-sm">
-                         + Dilution (融水)
-                      </span>
-                      <span className="text-blue-400 font-mono font-bold">
-                         {stats.dilution} ml
-                      </span>
+
+                  {!isConsumerMode && !isFood && (
+                    <>
+                      <div className="w-px h-8 bg-slate-800 mx-2"></div>
+                      <div className="text-center">
+                        <div className="text-[10px] text-slate-500 uppercase tracking-wider mb-1">
+                          成本率
+                        </div>
+                        <div
+                          className={`text-xl font-bold ${
+                            stats.costRate > 30
+                              ? 'text-rose-400'
+                              : 'text-emerald-400'
+                          }`}
+                        >
+                          {stats.costRate.toFixed(0)}%
+                        </div>
+                      </div>
+                    </>
+                  )}
+
+                  {(isFood || !isConsumerMode) && (
+                    <div className="w-px h-8 bg-slate-800 mx-2"></div>
+                  )}
+
+                  <div className="text-center flex-1">
+                    <div className="text-[10px] text-slate-500 uppercase tracking-wider mb-1">
+                      售價
+                    </div>
+                    <div className="text-xl font-bold text-slate-200 font-mono">
+                      ${item.price || stats.price}
+                    </div>
+                  </div>
+                </div>
+              )}
+
+              {/* 風味描述 */}
+              {item.flavorDescription && (
+                <div className="bg-amber-900/10 border-l-2 border-amber-500/50 p-4 rounded-r-xl">
+                  <p className="text-amber-100/90 italic text-sm leading-relaxed">
+                    "{item.flavorDescription}"
+                  </p>
+                </div>
+              )}
+
+              {/* 單品價格表 */}
+              {isSingle && !isConsumerMode && <PricingTable recipe={item} />}
+              {isSingle && isConsumerMode && (
+                <div className="grid grid-cols-3 gap-2 w-full text-center bg-slate-900/50 p-4 rounded-2xl border border-slate-800/50">
+                  {item.priceShot && (
+                    <div className="p-2 border border-slate-700 rounded-lg">
+                      <div className="text-[10px] text-slate-400">Shot</div>
+                      <div className="text-amber-400 font-bold">
+                        ${item.priceShot}
+                      </div>
+                    </div>
+                  )}
+                  {item.priceGlass && (
+                    <div className="p-2 border border-amber-500/30 rounded-lg shadow-sm shadow-amber-500/10">
+                      <div className="text-[10px] text-amber-500 font-bold">
+                        Glass
+                      </div>
+                      <div className="text-amber-400 font-bold text-lg">
+                        ${item.priceGlass}
+                      </div>
+                    </div>
+                  )}
+                  {item.priceBottle && (
+                    <div className="p-2 border border-slate-700 rounded-lg">
+                      <div className="text-[10px] text-slate-400">Bottle</div>
+                      <div className="text-amber-400 font-bold">
+                        ${item.priceBottle}
+                      </div>
                     </div>
                   )}
                 </div>
-              </div>
-            )}
+              )}
 
-            {/* 5. 製作步驟 (只在非顧客模式顯示) */}
-            {!isConsumerMode && !isFood && (
-              <div className="mt-6 pt-4 border-t border-slate-800">
-                <h3 className="text-xs font-bold text-slate-500 uppercase tracking-wider mb-3 flex items-center gap-2">
-                  <ListPlus size={14} /> 製作步驟 Steps
-                </h3>
-                <div className="text-slate-300 leading-relaxed whitespace-pre-line bg-slate-900/50 p-4 rounded-xl border border-slate-800/50 text-sm">
-                  {item.steps || '尚無步驟描述'}
+              {/* 材料列表 */}
+              {!isSingle && !isFood && (
+                <div className="mt-4">
+                  <h3 className="text-xs font-bold text-slate-500 uppercase tracking-wider mb-3 flex items-center gap-2">
+                    <Layers size={14} /> 材料 Ingredients
+                  </h3>
+                  <div className="space-y-3 pl-1">
+                    {item.ingredients.map((ingItem, idx) => {
+                      const ing = ingredients.find((i) => i.id === ingItem.id);
+                      return (
+                        <div
+                          key={idx}
+                          className="flex justify-between items-center py-2 border-b border-slate-800/50"
+                        >
+                          <div className="flex-1">
+                            <span className="text-slate-200 font-medium text-base">
+                              {ing?.nameZh || '未知材料'}
+                            </span>
+                            <span className="block text-xs text-slate-500">
+                              {ing?.nameEn}
+                            </span>
+                          </div>
+                          {!isConsumerMode && (
+                            <span className="text-amber-500 font-mono font-bold text-lg">
+                              {ingItem.amount}{' '}
+                              <span className="text-xs font-normal text-amber-500/70">
+                                ml
+                              </span>
+                            </span>
+                          )}
+                        </div>
+                      );
+                    })}
+                    {item.garnish && (
+                      <div className="flex justify-between items-center py-2 border-b border-slate-800/50 mt-2">
+                        <span className="text-slate-400 italic text-sm">
+                          Garnish (裝飾)
+                        </span>
+                        <span className="text-slate-300 font-medium">
+                          {item.garnish}
+                        </span>
+                      </div>
+                    )}
+                    {/* 融水顯示 */}
+                    {!isConsumerMode && stats.dilution > 0 && (
+                      <div className="flex justify-between items-center py-2 border-b border-slate-800/50">
+                        <span className="text-blue-400/70 italic text-sm">
+                          + Dilution (融水)
+                        </span>
+                        <span className="text-blue-400 font-mono font-bold">
+                          {stats.dilution} ml
+                        </span>
+                      </div>
+                    )}
+                  </div>
                 </div>
-              </div>
-            )}
-            
-            {/* 餐點的介紹 (餐點模式下對所有人顯示) */}
-            {isFood && item.steps && (
-               <div className="mt-4">
-                 <h3 className="text-xs font-bold text-slate-500 uppercase tracking-wider mb-2">
-                   介紹
-                 </h3>
-                 <div className="text-slate-300 leading-relaxed whitespace-pre-line">
-                   {item.steps}
-                 </div>
-               </div>
-            )}
+              )}
 
+              {/* 製作步驟 */}
+              {!isConsumerMode && !isFood && (
+                <div className="mt-6 pt-4 border-t border-slate-800">
+                  <h3 className="text-xs font-bold text-slate-500 uppercase tracking-wider mb-3 flex items-center gap-2">
+                    <ListPlus size={14} /> 製作步驟 Steps
+                  </h3>
+                  <div className="text-slate-300 leading-relaxed whitespace-pre-line bg-slate-900/50 p-4 rounded-xl border border-slate-800/50 text-sm">
+                    {item.steps || '尚無步驟描述'}
+                  </div>
+                </div>
+              )}
+
+              {/* 餐點介紹 */}
+              {isFood && item.steps && (
+                <div className="mt-4">
+                  <h3 className="text-xs font-bold text-slate-500 uppercase tracking-wider mb-2">
+                    介紹
+                  </h3>
+                  <div className="text-slate-300 leading-relaxed whitespace-pre-line">
+                    {item.steps}
+                  </div>
+                </div>
+              )}
+            </div>
           </div>
         </div>
 
-        {/* 底部按鈕區 */}
+        {/* 底部按鈕區 (固定在最下方) */}
         <div className="p-4 border-t border-slate-800 bg-slate-950 pb-safe z-20 flex gap-3 shrink-0">
           <button
             onClick={() =>
@@ -4764,7 +4752,11 @@ const ViewerOverlay = ({
             <button
               onClick={() =>
                 startEdit(
-                  item.isIngredient ? 'ingredient' : isFood ? 'food' : 'recipe',
+                  item.isIngredient
+                    ? 'ingredient'
+                    : isFood
+                    ? 'food'
+                    : 'recipe',
                   item
                 )
               }
@@ -4832,6 +4824,7 @@ const LoginScreen = ({ onLogin }) => {
     if (role === 'owner') {
       const localPwd = localStorage.getItem('bar_admin_password');
       if (localPwd && password === localPwd) {
+        // 註解：本地密碼驗證通過，跳過 DB 檢查，直接往下執行登入
       } else if (db) {
         try {
           const settingsDoc = await db
@@ -5290,10 +5283,18 @@ const handleAutoCreateGridBlock = (newBaseName) => {
     setGridCategories([...gridCategories, newCat]);
   };
 
-  const handleDeleteGridCategory = (id) => {
-    if (confirm(`確定移除此方塊嗎？`))
-      setGridCategories(gridCategories.filter((c) => c.id !== id));
-  };
+// 1. 這是刪除 (原本就有的)
+const handleDeleteGridCategory = (id) => {
+  if (confirm(`確定移除此方塊嗎？`))
+    setGridCategories(gridCategories.filter((c) => c.id !== id));
+}; 
+
+// 2. 這是更新功能 (放在刪除功能的「下面」，彼此分開)
+const handleUpdateGridCategory = (updatedCat) => {
+  setGridCategories((prev) =>
+    prev.map((cat) => (cat.id === updatedCat.id ? updatedCat : cat))
+  );
+};
   // ★ 修改：加入讀取與儲存功能，讓大分類不會重整後消失
   const [ingCategories, setIngCategories] = useState(() => {
     try {
@@ -5994,6 +5995,8 @@ const handleAutoCreateGridBlock = (newBaseName) => {
             gridCategories={gridCategories} 
             onAddGridCategory={handleAddGridCategory}
             onDeleteGridCategory={handleDeleteGridCategory}
+            // ★★★ 請插入這一行 (把功能傳進去) ★★★
+            onUpdateGridCategory={handleUpdateGridCategory}
           />
         )}
 
@@ -6449,7 +6452,6 @@ const handleAutoCreateGridBlock = (newBaseName) => {
         availableBases={availableBases}
         categorySubItems={categorySubItems}
         onAddSubCategory={handleAddSubCategory}
-        setAvailableBases={setAvailableBases}
         requestDelete={requestDelete}
         ingCategories={ingCategories}
         setIngCategories={setIngCategories}
