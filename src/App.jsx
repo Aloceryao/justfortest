@@ -419,7 +419,7 @@ const safeString = (str) => (str || '').toString();
 // ==========================================
 // ★ 版本號設定 (修改這裡會同步更新登入頁與設定頁)
 // ==========================================
-const APP_VERSION = 'v16.1 (完整修復版)';
+const APP_VERSION = 'v16.2 (完整修復版)';
 const safeNumber = (num) => {
   const n = parseFloat(num);
   return isNaN(n) ? 0 : n;
@@ -4848,13 +4848,11 @@ const LoginScreen = ({ onLogin }) => {
     const handleRedirectResult = async () => {
       // 防止同一個 effect 中多次執行
       if (hasRun) {
-        console.log('[Redirect] Already ran in this effect');
         return;
       }
       hasRun = true;
       
       if (!window.firebase) {
-        console.log('[Redirect] Firebase not ready');
         return;
       }
       
@@ -4863,76 +4861,55 @@ const LoginScreen = ({ onLogin }) => {
       const timestamp = localStorage.getItem('google_auth_timestamp');
       
       if (!action) {
-        console.log('[Redirect] No pending Google auth');
         return;
       }
       
       // 檢查時間戳（5 分鐘超時）
       if (timestamp) {
         const elapsed = Date.now() - parseInt(timestamp);
-        const minutesElapsed = Math.floor(elapsed / 60000);
-        console.log('[Redirect] Auth started', minutesElapsed, 'minutes ago');
         
         if (elapsed > 5 * 60 * 1000) {
-          console.log('[Redirect] Auth timestamp expired (>5 min), clearing...');
           localStorage.removeItem('google_auth_action');
           localStorage.removeItem('google_auth_timestamp');
           return;
         }
       }
       
-      console.log('[Redirect] Found action:', action);
-      console.log('[Redirect] Calling getRedirectResult...');
-      
       try {
         const auth = window.firebase.auth();
         const result = await auth.getRedirectResult();
         
-        console.log('[Redirect] Result received');
-        console.log('[Redirect] User:', result.user ? 'YES' : 'NO');
-        console.log('[Redirect] Credential:', result.credential ? 'YES' : 'NO');
-        
         if (result.user) {
           const userId = result.user.uid;
           const userEmail = result.user.email;
-          
-          console.log('[Redirect] User ID:', userId);
-          console.log('[Redirect] User Email:', userEmail);
           
           // 清除標記（重要：立即清除，防止重複執行）
           localStorage.removeItem('google_auth_action');
           localStorage.removeItem('google_auth_timestamp');
           
           const db = window.firebase.firestore();
-          console.log('[Redirect] Fetching user doc...');
           const userDoc = await db.collection('users').doc(userId).get();
-          
-          console.log('[Redirect] User doc exists:', userDoc.exists);
           
           if (action === 'login') {
             // 登入流程
             if (!userDoc.exists || !userDoc.data().shopId) {
-              console.log('[Redirect] User not registered');
               await auth.signOut();
               setError('此 Google 帳號尚未註冊。請點擊下方「註冊新商店」進行註冊');
               setMode('select');
               return;
             }
             const userShopId = userDoc.data().shopId;
-            console.log('[Redirect] Logging in with shopId:', userShopId);
             onLogin(userShopId, 'owner');
             
           } else if (action === 'register') {
             // 註冊流程
             if (userDoc.exists && userDoc.data().shopId) {
-              console.log('[Redirect] User already registered');
               await auth.signOut();
               setError('此 Google 帳號已註冊。請返回登入頁面進行登入');
               setMode('select');
               return;
             }
             // 進入填寫商店資料流程
-            console.log('[Redirect] Entering Google register mode');
             setEmail(userEmail);
             setMode('google-register');
           }
@@ -4943,8 +4920,6 @@ const LoginScreen = ({ onLogin }) => {
           // 3. 舊的 action 標記
           
           if (!result.credential) {
-            console.log('[Redirect] No credential - likely stale action or already consumed');
-            console.log('[Redirect] Clearing stale markers...');
             localStorage.removeItem('google_auth_action');
             localStorage.removeItem('google_auth_timestamp');
           }
@@ -5044,15 +5019,11 @@ const LoginScreen = ({ onLogin }) => {
       const auth = window.firebase.auth();
       const provider = new window.firebase.auth.GoogleAuthProvider();
       
-      console.log('[Login] Attempting Google login with Popup first...');
-      
       try {
         // 先嘗試 Popup 模式（電腦瀏覽器適用）
         const result = await auth.signInWithPopup(provider);
         const userId = result.user.uid;
         const userEmail = result.user.email;
-        
-        console.log('[Login] Popup success, checking user doc...');
         
         // 檢查是否已綁定商店
         const db = window.firebase.firestore();
@@ -5067,15 +5038,12 @@ const LoginScreen = ({ onLogin }) => {
         }
         
         const userShopId = userDoc.data().shopId;
-        console.log('[Login] Logging in with shopId:', userShopId);
         onLogin(userShopId, 'owner');
         
       } catch (popupError) {
         // Popup 失敗，改用 Redirect 模式
         if (popupError.code === 'auth/popup-blocked' || 
             popupError.code === 'auth/popup-closed-by-user') {
-          
-          console.log('[Login] Popup blocked/closed, switching to Redirect...');
           
           // 標記這是登入流程（用於 redirect 回來後識別）
           localStorage.setItem('google_auth_action', 'login');
@@ -5112,15 +5080,11 @@ const LoginScreen = ({ onLogin }) => {
       const auth = window.firebase.auth();
       const provider = new window.firebase.auth.GoogleAuthProvider();
       
-      console.log('[Register] Attempting Google register with Popup first...');
-      
       try {
         // 先嘗試 Popup 模式
         const result = await auth.signInWithPopup(provider);
         const userId = result.user.uid;
         const userEmail = result.user.email;
-        
-        console.log('[Register] Popup success, checking user doc...');
         
         // 檢查是否已經註冊過
         const db = window.firebase.firestore();
@@ -5135,7 +5099,6 @@ const LoginScreen = ({ onLogin }) => {
         }
         
         // 首次註冊，進入填寫商店資料流程
-        console.log('[Register] Entering register flow');
         setEmail(userEmail);
         setMode('google-register');
         setLoading(false);
@@ -5144,8 +5107,6 @@ const LoginScreen = ({ onLogin }) => {
         // Popup 失敗，改用 Redirect 模式
         if (popupError.code === 'auth/popup-blocked' || 
             popupError.code === 'auth/popup-closed-by-user') {
-          
-          console.log('[Register] Popup blocked/closed, switching to Redirect...');
           
           // 標記這是註冊流程
           localStorage.setItem('google_auth_action', 'register');
@@ -5855,7 +5816,7 @@ const LoginScreen = ({ onLogin }) => {
                     <option value="">-- 選擇您的名字 --</option>
                     {staffList.map((s) => (
                       <option key={s.id} value={s.id}>
-                        {s.name} {s.role === 'manager' && '(資深)'}
+                        {s.name}
                       </option>
                     ))}
                   </select>
@@ -6387,7 +6348,6 @@ const handleUpdateGridCategory = (updatedCat) => {
   }, [shopId, isLoggedIn, firebaseReady]);
 
   const handleLogin = (sid, role) => {
-    console.log('handleLogin called with shopId:', sid, 'role:', role);
     setShopId(sid);
     setUserRole(role);
     setIsLoggedIn(true);
@@ -6397,7 +6357,6 @@ const handleUpdateGridCategory = (updatedCat) => {
     // 清除所有 redirect 相關標記
     sessionStorage.removeItem('redirect_processed_login');
     sessionStorage.removeItem('redirect_processed_register');
-    console.log('Login completed');
   };
 
   const handleLogout = () => {
@@ -7213,7 +7172,8 @@ const handleUpdateGridCategory = (updatedCat) => {
                       <div>
                         <div className="text-sm font-bold text-slate-200 flex items-center gap-2">
                           {staff.name}
-                          {staff.role === 'manager' && (
+                          {/* 只有店長能看到「資深」標記 */}
+                          {userRole === 'owner' && staff.role === 'manager' && (
                             <span className="text-[10px] bg-amber-900 text-amber-100 px-1 rounded">
                               資深
                             </span>
