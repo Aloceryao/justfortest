@@ -419,7 +419,7 @@ const safeString = (str) => (str || '').toString();
 // ==========================================
 // ★ 版本號設定 (修改這裡會同步更新登入頁與設定頁)
 // ==========================================
-const APP_VERSION = 'v16.6';
+const APP_VERSION = 'v16.1 (完整修復版)';
 const safeNumber = (num) => {
   const n = parseFloat(num);
   return isNaN(n) ? 0 : n;
@@ -4914,22 +4914,27 @@ const LoginScreen = ({ onLogin }) => {
 
   // ========== 店長 Google 登入 ==========
   const handleGoogleLogin = async () => {
+    console.log('Google login started');
     setLoading(true);
     setError('');
     
     try {
       const auth = window.firebase.auth();
       const provider = new window.firebase.auth.GoogleAuthProvider();
+      console.log('Opening Google popup...');
       const result = await auth.signInWithPopup(provider);
       const userId = result.user.uid;
       const userEmail = result.user.email;
+      console.log('Google auth successful, user:', userEmail);
       
       // 檢查是否已綁定商店
       const db = window.firebase.firestore();
+      console.log('Checking user doc...');
       const userDoc = await db.collection('users').doc(userId).get();
       
       if (!userDoc.exists || !userDoc.data().shopId) {
         // 未註冊的用戶，登出並提示去註冊
+        console.log('User not registered, signing out');
         await auth.signOut();
         setError('此 Google 帳號尚未註冊。請點擊下方「註冊新商店」進行註冊');
         setLoading(false);
@@ -4937,7 +4942,10 @@ const LoginScreen = ({ onLogin }) => {
       }
       
       const userShopId = userDoc.data().shopId;
+      console.log('User registered with shopId:', userShopId);
+      console.log('Calling onLogin...');
       onLogin(userShopId, 'owner');
+      console.log('onLogin called successfully');
       
     } catch (e) {
       console.error('Google login error:', e);
@@ -4949,6 +4957,7 @@ const LoginScreen = ({ onLogin }) => {
         setError('Google 登入失敗：' + e.message);
       }
     } finally {
+      console.log('Google login finished, setting loading to false');
       setLoading(false);
     }
   };
@@ -6099,64 +6108,99 @@ const handleUpdateGridCategory = (updatedCat) => {
 
   useEffect(() => {
     if (isLoggedIn && shopId && window.firebase && firebaseReady) {
+      console.log('Starting Firestore subscriptions for shop:', shopId);
       const db = window.firebase.firestore();
+      
       const unsubIng = db
         .collection('shops')
         .doc(shopId)
         .collection('ingredients')
-        .onSnapshot((snap) => {
-          const list = snap.docs.map((d) => d.data());
-          setIngredients(list);
-          localStorage.setItem('bar_ingredients_v3', JSON.stringify(list));
-        });
+        .onSnapshot(
+          (snap) => {
+            const list = snap.docs.map((d) => d.data());
+            setIngredients(list);
+            localStorage.setItem('bar_ingredients_v3', JSON.stringify(list));
+          },
+          (error) => console.error('Ingredients snapshot error:', error)
+        );
+        
       const unsubRec = db
         .collection('shops')
         .doc(shopId)
         .collection('recipes')
-        .onSnapshot((snap) => {
-          const list = snap.docs.map((d) => d.data());
-          setRecipes(list);
-          localStorage.setItem('bar_recipes_v3', JSON.stringify(list));
-        });
+        .onSnapshot(
+          (snap) => {
+            const list = snap.docs.map((d) => d.data());
+            setRecipes(list);
+            localStorage.setItem('bar_recipes_v3', JSON.stringify(list));
+          },
+          (error) => console.error('Recipes snapshot error:', error)
+        );
+        
       const unsubFood = db
         .collection('shops')
         .doc(shopId)
         .collection('foods')
-        .onSnapshot((snap) => {
-          const list = snap.docs.map((d) => d.data());
-          setFoodItems(list);
-          localStorage.setItem('bar_foods_v1', JSON.stringify(list));
-        });
+        .onSnapshot(
+          (snap) => {
+            const list = snap.docs.map((d) => d.data());
+            setFoodItems(list);
+            localStorage.setItem('bar_foods_v1', JSON.stringify(list));
+          },
+          (error) => console.error('Foods snapshot error:', error)
+        );
+        
       const unsubSec = db
         .collection('shops')
         .doc(shopId)
         .collection('sections')
-        .onSnapshot((snap) => {
-          const list = snap.docs.map((d) => d.data());
-          setSections(list);
-          localStorage.setItem('bar_sections_v3', JSON.stringify(list));
-        });
+        .onSnapshot(
+          (snap) => {
+            const list = snap.docs.map((d) => d.data());
+            setSections(list);
+            localStorage.setItem('bar_sections_v3', JSON.stringify(list));
+          },
+          (error) => console.error('Sections snapshot error:', error)
+        );
+        
       const unsubConfig = db
         .collection('shops')
         .doc(shopId)
         .collection('settings')
         .doc('config')
-        .onSnapshot((doc) => {
-          if (doc.exists) {
-            const data = doc.data();
-            if (data.staffList) setStaffList(data.staffList);
-            // 載入商店名稱
-            if (data.shopName) {
-              setCurrentShopName(data.shopName);
-              setNewShopNameInput(data.shopName);
+        .onSnapshot(
+          (doc) => {
+            console.log('Config snapshot received, exists:', doc.exists);
+            if (doc.exists) {
+              const data = doc.data();
+              if (data.staffList) setStaffList(data.staffList);
+              // 載入商店名稱
+              if (data.shopName) {
+                setCurrentShopName(data.shopName);
+                setNewShopNameInput(data.shopName);
+              } else {
+                // 如果沒有設定商店名稱，使用 shopId
+                setCurrentShopName(shopId);
+                setNewShopNameInput(shopId);
+              }
             } else {
-              // 如果沒有設定商店名稱，使用 shopId
+              // 文件不存在，使用 shopId 作為預設名稱
+              console.log('Config does not exist, using shopId as shop name');
               setCurrentShopName(shopId);
               setNewShopNameInput(shopId);
+              setStaffList([]);
             }
+          },
+          (error) => {
+            console.error('Config snapshot error:', error);
+            // 即使出錯，也設定預設值
+            setCurrentShopName(shopId);
+            setNewShopNameInput(shopId);
+            setStaffList([]);
           }
-        });
+        );
       return () => {
+        console.log('Cleaning up Firestore subscriptions');
         unsubIng();
         unsubRec();
         unsubFood();
@@ -6164,6 +6208,12 @@ const handleUpdateGridCategory = (updatedCat) => {
         unsubConfig();
       };
     } else {
+      console.log('Loading from localStorage, conditions:', {
+        isLoggedIn,
+        shopId,
+        hasFirebase: !!window.firebase,
+        firebaseReady,
+      });
       try {
         const i = localStorage.getItem('bar_ingredients_v3');
         if (i) setIngredients(JSON.parse(i));
@@ -6173,7 +6223,9 @@ const handleUpdateGridCategory = (updatedCat) => {
         if (f) setFoodItems(JSON.parse(f));
         const s = localStorage.getItem('bar_sections_v3');
         if (s) setSections(JSON.parse(s));
-      } catch (e) {}
+      } catch (e) {
+        console.error('Error loading from localStorage:', e);
+      }
     }
   }, [shopId, isLoggedIn, firebaseReady]);
 
