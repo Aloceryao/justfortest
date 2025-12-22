@@ -419,7 +419,7 @@ const safeString = (str) => (str || '').toString();
 // ==========================================
 // ★ 版本號設定 (修改這裡會同步更新登入頁與設定頁)
 // ==========================================
-const APP_VERSION = 'v16.9 (完整修復版)';
+const APP_VERSION = 'v16.1 (完整修復版)';
 const safeNumber = (num) => {
   const n = parseFloat(num);
   return isNaN(n) ? 0 : n;
@@ -6152,6 +6152,15 @@ const handleUpdateGridCategory = (updatedCat) => {
     console.log('[App Init] localStorage shop:', savedShop);
     console.log('[App Init] localStorage role:', savedRole);
 
+    // ✅ 檢查並清理不一致的 localStorage 狀態
+    if (savedShop && !savedRole) {
+      console.log('[App Init] 檢測到不一致的 localStorage（有 shop 無 role），清除 shop');
+      localStorage.removeItem('bar_shop_id');
+    } else if (!savedShop && savedRole) {
+      console.log('[App Init] 檢測到不一致的 localStorage（有 role 無 shop），清除 role');
+      localStorage.removeItem('bar_user_role');
+    }
+
     if (savedShop && savedRole && !urlShop) {
       console.log('[App Init] 從 localStorage 恢復登入狀態');
       setShopId(savedShop);
@@ -6318,13 +6327,16 @@ const handleUpdateGridCategory = (updatedCat) => {
   };
 
   const handleLogout = () => {
+    console.log('[handleLogout] 開始登出');
     setIsLoggedIn(false);
     localStorage.removeItem('bar_user_role');
+    localStorage.removeItem('bar_shop_id'); // ✅ 修正：也要移除 shop ID
     setShopId('');
     setIngredients([]);
     setRecipes([]);
     setFoodItems([]);
     setStaffList([]);
+    console.log('[handleLogout] localStorage 已清除');
     if (window.history.pushState) {
       const newurl =
         window.location.protocol +
@@ -6333,6 +6345,7 @@ const handleUpdateGridCategory = (updatedCat) => {
         window.location.pathname;
       window.history.pushState({ path: newurl }, '', newurl);
     }
+    console.log('[handleLogout] 登出完成');
   };
 
   const closeDialog = () => setDialog({ ...dialog, isOpen: false });
