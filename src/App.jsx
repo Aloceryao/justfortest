@@ -419,7 +419,7 @@ const safeString = (str) => (str || '').toString();
 // ==========================================
 // ★ 版本號設定 (修改這裡會同步更新登入頁與設定頁)
 // ==========================================
-const APP_VERSION = 'v16.8 (完整修復版)';
+const APP_VERSION = 'v16.9 (完整修復版)';
 const safeNumber = (num) => {
   const n = parseFloat(num);
   return isNaN(n) ? 0 : n;
@@ -4843,31 +4843,58 @@ const LoginScreen = ({ onLogin }) => {
 
   // 處理 Google Redirect 回來的結果
   useEffect(() => {
+    let hasRun = false; // 防止重複執行
+    
     const handleRedirectResult = async () => {
-      if (!window.firebase) return;
+      if (hasRun) {
+        console.log('[Redirect] 已執行過，跳過');
+        return;
+      }
+      
+      console.log('[Redirect] useEffect 開始執行');
+      
+      if (!window.firebase) {
+        console.log('[Redirect] Firebase 尚未載入');
+        return;
+      }
+      
+      hasRun = true; // 標記已執行
       
       try {
         const auth = window.firebase.auth();
+        console.log('[Redirect] 呼叫 getRedirectResult...');
         const result = await auth.getRedirectResult();
+        
+        console.log('[Redirect] getRedirectResult 完成');
+        console.log('[Redirect] User:', result.user ? 'YES' : 'NO');
+        console.log('[Redirect] Credential:', result.credential ? 'YES' : 'NO');
         
         // 如果沒有 user，表示不是從 redirect 回來的，或已經處理過了
         if (!result.user) {
+          console.log('[Redirect] 沒有用戶資料，正常頁面載入');
           return;
         }
         
         const userId = result.user.uid;
         const userEmail = result.user.email;
+        console.log('[Redirect] User ID:', userId);
+        console.log('[Redirect] User Email:', userEmail);
         
         // 檢查是登入還是註冊（從 sessionStorage 讀取）
-        const mode = sessionStorage.getItem('google_auth_mode') || 'login';
+        const authMode = sessionStorage.getItem('google_auth_mode') || 'login';
+        console.log('[Redirect] Auth mode:', authMode);
         sessionStorage.removeItem('google_auth_mode'); // 立即清除，避免重複處理
         
         const db = window.firebase.firestore();
+        console.log('[Redirect] 查詢 Firestore...');
         const userDoc = await db.collection('users').doc(userId).get();
+        console.log('[Redirect] User doc exists:', userDoc.exists);
         
-        if (mode === 'login') {
+        if (authMode === 'login') {
           // 登入流程
+          console.log('[Redirect] 執行登入流程');
           if (!userDoc.exists || !userDoc.data().shopId) {
+            console.log('[Redirect] 用戶未註冊');
             await auth.signOut();
             setError('此 Google 帳號尚未註冊。請點擊下方「註冊新商店」進行註冊');
             setMode('select');
@@ -4876,11 +4903,16 @@ const LoginScreen = ({ onLogin }) => {
           }
           
           const userShopId = userDoc.data().shopId;
+          console.log('[Redirect] Shop ID:', userShopId);
+          console.log('[Redirect] 呼叫 onLogin...');
           onLogin(userShopId, 'owner');
+          console.log('[Redirect] onLogin 完成');
           
-        } else if (mode === 'register') {
+        } else if (authMode === 'register') {
           // 註冊流程
+          console.log('[Redirect] 執行註冊流程');
           if (userDoc.exists && userDoc.data().shopId) {
+            console.log('[Redirect] 用戶已註冊');
             await auth.signOut();
             setError('此 Google 帳號已註冊。請返回登入頁面進行登入');
             setMode('select');
@@ -4889,22 +4921,25 @@ const LoginScreen = ({ onLogin }) => {
           }
           
           // 進入填寫商店資料流程
+          console.log('[Redirect] 進入填寫商店資料');
           setEmail(userEmail);
           setMode('google-register');
           setLoading(false);
         }
         
       } catch (e) {
-        console.error('處理 Redirect 結果錯誤:', e);
+        console.error('[Redirect] 錯誤:', e);
+        console.error('[Redirect] 錯誤訊息:', e.message);
+        console.error('[Redirect] 錯誤代碼:', e.code);
         setError('登入處理失敗：' + e.message);
         setLoading(false);
       }
     };
     
     // 延遲執行，確保 Firebase 初始化完成
-    const timer = setTimeout(handleRedirectResult, 500);
+    const timer = setTimeout(handleRedirectResult, 1000);
     return () => clearTimeout(timer);
-  }, [onLogin]);
+  }, [onLogin]); // 加入 onLogin 依賴，確保使用最新的函數引用
 
   // 店員模式：自動載入店員名單
   useEffect(() => {
@@ -4979,6 +5014,7 @@ const LoginScreen = ({ onLogin }) => {
 
   // ========== 店長 Google 登入 ==========
   const handleGoogleLogin = async () => {
+    console.log('[Google Login] 開始 Google 登入');
     setLoading(true);
     setError('');
     
@@ -4988,13 +5024,18 @@ const LoginScreen = ({ onLogin }) => {
       
       // 使用 Redirect 模式（手機和電腦都適用）
       // 標記這是登入流程（用 sessionStorage，iOS 跳轉時會保留）
+      console.log('[Google Login] 設定 sessionStorage: google_auth_mode = login');
       sessionStorage.setItem('google_auth_mode', 'login');
+      console.log('[Google Login] sessionStorage 設定完成');
+      console.log('[Google Login] 檢查 sessionStorage:', sessionStorage.getItem('google_auth_mode'));
       
       // 跳轉到 Google 驗證（之後的程式碼不會執行）
+      console.log('[Google Login] 呼叫 signInWithRedirect...');
       await auth.signInWithRedirect(provider);
+      console.log('[Google Login] signInWithRedirect 完成（這行不應該出現）');
       
     } catch (e) {
-      console.error('Google 登入錯誤:', e);
+      console.error('[Google Login] 錯誤:', e);
       setError('Google 登入失敗：' + e.message);
       setLoading(false);
     }
@@ -6075,11 +6116,16 @@ const handleUpdateGridCategory = (updatedCat) => {
   });
 
   useEffect(() => {
+    console.log('[App Init] ========== MainAppContent 初始化 ==========');
+    
     const params = new URLSearchParams(window.location.search);
     const urlShop = params.get('shop');
     const urlMode = params.get('mode');
+    console.log('[App Init] URL shop:', urlShop);
+    console.log('[App Init] URL mode:', urlMode);
 
     if (urlShop && urlMode === 'customer') {
+      console.log('[App Init] 從 URL 登入為 customer');
       setShopId(urlShop);
       setUserRole('customer');
       setIsLoggedIn(true);
@@ -6093,20 +6139,26 @@ const handleUpdateGridCategory = (updatedCat) => {
     script.async = true;
     document.body.appendChild(script);
 
+    console.log('[App Init] 載入 Firebase...');
     loadFirebase()
       .then(() => {
-        console.log('Firebase Loaded');
+        console.log('[App Init] Firebase 載入完成');
         setFirebaseReady(true);
       })
-      .catch((err) => console.error('Firebase Error', err));
+      .catch((err) => console.error('[App Init] Firebase 錯誤', err));
 
     const savedShop = localStorage.getItem('bar_shop_id');
     const savedRole = localStorage.getItem('bar_user_role');
+    console.log('[App Init] localStorage shop:', savedShop);
+    console.log('[App Init] localStorage role:', savedRole);
 
     if (savedShop && savedRole && !urlShop) {
+      console.log('[App Init] 從 localStorage 恢復登入狀態');
       setShopId(savedShop);
       setUserRole(savedRole);
       setIsLoggedIn(true);
+    } else {
+      console.log('[App Init] 沒有已儲存的登入資訊，保持登出狀態');
     }
 
     window.addEventListener('online', () => setIsOnline(true));
@@ -6243,12 +6295,26 @@ const handleUpdateGridCategory = (updatedCat) => {
   }, [shopId, isLoggedIn, firebaseReady]);
 
   const handleLogin = (sid, role) => {
+    console.log('[handleLogin] ========== 開始 ==========');
+    console.log('[handleLogin] Shop ID:', sid);
+    console.log('[handleLogin] Role:', role);
+    console.log('[handleLogin] 當前 isLoggedIn 狀態:', isLoggedIn);
+    
+    console.log('[handleLogin] 設定 shopId...');
     setShopId(sid);
+    console.log('[handleLogin] 設定 userRole...');
     setUserRole(role);
+    console.log('[handleLogin] 設定 isLoggedIn = true...');
     setIsLoggedIn(true);
+    console.log('[handleLogin] 寫入 localStorage...');
     localStorage.setItem('bar_shop_id', sid);
     localStorage.setItem('bar_user_role', role);
+    console.log('[handleLogin] localStorage 寫入完成');
+    console.log('[handleLogin] 設定 activeTab...');
     setActiveTab('recipes');
+    
+    console.log('[handleLogin] ========== 完成 ==========');
+    console.log('[handleLogin] 下一次渲染應該會進入主畫面');
   };
 
   const handleLogout = () => {
@@ -6772,7 +6838,16 @@ const handleUpdateGridCategory = (updatedCat) => {
     setEditorMode(null);
   };
 
-  if (!isLoggedIn) return <LoginScreen onLogin={handleLogin} />;
+  console.log('[App Render] isLoggedIn:', isLoggedIn);
+  console.log('[App Render] shopId:', shopId);
+  console.log('[App Render] userRole:', userRole);
+  
+  if (!isLoggedIn) {
+    console.log('[App Render] 渲染 LoginScreen');
+    return <LoginScreen onLogin={handleLogin} />;
+  }
+  
+  console.log('[App Render] 渲染主畫面');
 
   const isOwner = userRole === 'owner';
   const isManager = userRole === 'manager';
