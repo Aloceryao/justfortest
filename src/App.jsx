@@ -419,7 +419,7 @@ const safeString = (str) => (str || '').toString();
 // ==========================================
 // ★ 版本號設定 (修改這裡會同步更新登入頁與設定頁)
 // ==========================================
-const APP_VERSION = 'v16.7 (完整修復版)';
+const APP_VERSION = 'v16.8 (完整修復版)';
 const safeNumber = (num) => {
   const n = parseFloat(num);
   return isNaN(n) ? 0 : n;
@@ -5116,29 +5116,47 @@ const LoginScreen = ({ onLogin }) => {
       log('[Google Login] Auth Domain: ' + config.authDomain);
       log('[Google Login] Project ID: ' + config.projectId);
       
-      // 跳轉到 Google 驗證（之後的程式碼不會執行）
-      log('[Google Login] 🚀 準備呼叫 signInWithRedirect...');
-      log('[Google Login] ⏳ 即將跳轉到 Google（應該會離開此頁面）');
+      // 嘗試使用 Popup 模式（測試用）
+      log('[Google Login] 🧪 測試：先使用 signInWithPopup...');
+      log('[Google Login] ⏳ 即將開啟 Google 登入彈窗');
       log('═══════════════════════════════════════');
       
-      setError('跳轉到 Google 中...');
+      setError('開啟 Google 登入彈窗中...');
       
-      // 使用 Promise 確保捕捉錯誤
-      await auth.signInWithRedirect(provider).catch((redirectError) => {
-        log('[Google Login] ❌ signInWithRedirect 發生錯誤！');
-        log('[Google Login] 錯誤: ' + redirectError.message);
-        log('[Google Login] 錯誤代碼: ' + redirectError.code);
-        throw redirectError;
-      });
-      
-      // 這行不應該被執行到（因為會跳轉）
-      log('═══════════════════════════════════════');
-      log('[Google Login] ⚠️⚠️⚠️ 警告：signInWithRedirect 後的程式碼被執行了！');
-      log('[Google Login] ⚠️ 這表示沒有成功跳轉到 Google');
-      log('[Google Login] ⚠️ 這是不正常的狀況！');
-      log('═══════════════════════════════════════');
-      setError('跳轉失敗：未能連接到 Google 登入頁面');
-      setLoading(false);
+      try {
+        // 先試試 Popup 模式
+        log('[Google Login] 呼叫 signInWithPopup...');
+        const result = await auth.signInWithPopup(provider);
+        log('[Google Login] ✓ signInWithPopup 成功！');
+        log('[Google Login] User: ' + result.user.email);
+        
+        // 手動處理登入（因為用 popup 模式，不會觸發 redirect useEffect）
+        const userId = result.user.uid;
+        const userEmail = result.user.email;
+        
+        const db = window.firebase.firestore();
+        const userDoc = await db.collection('users').doc(userId).get();
+        
+        if (!userDoc.exists || !userDoc.data().shopId) {
+          log('[Google Login] ✗ 用戶未註冊');
+          await auth.signOut();
+          setError('此 Google 帳號尚未註冊。請點擊下方「註冊新商店」進行註冊');
+          setLoading(false);
+          return;
+        }
+        
+        const userShopId = userDoc.data().shopId;
+        log('[Google Login] ✓ Shop ID: ' + userShopId);
+        log('[Google Login] 呼叫 onLogin...');
+        onLogin(userShopId, 'owner');
+        log('[Google Login] ✓✓✓ 登入成功！');
+        
+      } catch (popupError) {
+        log('[Google Login] ❌ signInWithPopup 發生錯誤！');
+        log('[Google Login] 錯誤: ' + popupError.message);
+        log('[Google Login] 錯誤代碼: ' + popupError.code);
+        throw popupError;
+      }
       
     } catch (e) {
       log('═══════════════════════════════════════');
