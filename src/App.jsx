@@ -419,7 +419,7 @@ const safeString = (str) => (str || '').toString();
 // ==========================================
 // ★ 版本號設定 (修改這裡會同步更新登入頁與設定頁)
 // ==========================================
-const APP_VERSION = 'v16.10.2 (登入測試完整版)';
+const APP_VERSION = 'v16.10.3 (登入測試完整版)';
 const safeNumber = (num) => {
   const n = parseFloat(num);
   return isNaN(n) ? 0 : n;
@@ -2794,63 +2794,40 @@ const InventoryScreen = ({
     </div>
   );
 };
-
-// 原本的程式碼可能長這樣：
-/*
+// ==========================================
+// ★ 修正後的 IngredientPickerModal (完整替換版)
+// ==========================================
 const IngredientPickerModal = ({
   isOpen,
   onClose,
   onSelect,
-  ingredients,
-  categories, 
-  availableBases,
-}) => {
-  // ...
-*/
-
-// 🔥 請修改為以下版本：
-const IngredientPickerModal = ({
-  isOpen,
-  onClose,
-  onSelect,
-  ingredients = [], // 1. 改這裡：加上預設值，防止 undefined 傳入
-  categories, 
+  ingredients = [], // ★ 修正 1: 加上預設值，防止 undefined
+  categories,
   availableBases,
 }) => {
   const [searchTerm, setSearchTerm] = useState('');
   const [filterType, setFilterType] = useState('all');
 
+  // 如果沒開，或者 onSelect 函式遺失，就不渲染
   if (!isOpen) return null;
 
-  // 取得所有不重複的子分類 (用於篩選)
-  const subTypes = useMemo(() => {
-    // 2. 改這裡：加上安全檢查，確保 ingredients 是陣列
-    if (!Array.isArray(ingredients)) return []; 
-    
-    const list = ingredients
-      .filter(i => i) // 過濾掉可能的 null/undefined 項目
-      .map((i) => i.subType)
-      .filter((t) => t && t.trim() !== '');
-    return [...new Set(list)];
-  }, [ingredients]);
-
-  // 3. 改這裡：加上安全檢查，防止 filter 崩潰
+  // ★ 修正 2: 這裡加上安全檢查，確保 ingredients 是陣列
   const safeIngredients = Array.isArray(ingredients) ? ingredients : [];
-  
+
   const filtered = safeIngredients.filter((ing) => {
-    if (!ing) return false; // 關鍵：如果材料本身是 null，直接跳過
+    // ★ 修正 3: 防止資料庫有壞掉的空資料 (null)
+    if (!ing) return false;
 
     const matchSearch =
       safeString(ing.nameZh).includes(searchTerm) ||
       safeString(ing.nameEn).toLowerCase().includes(searchTerm.toLowerCase());
-    
-    // 簡單的分類篩選邏輯
+
     let matchType = true;
     if (filterType !== 'all') {
       if (filterType === 'alcohol') matchType = ing.type === 'alcohol';
       else if (filterType === 'soft') matchType = ing.type === 'soft';
       else if (filterType === 'other') matchType = ing.type === 'other';
-      else matchType = ing.subType === filterType; // 支援子分類篩選
+      else matchType = ing.subType === filterType;
     }
 
     return matchSearch && matchType;
@@ -2910,8 +2887,9 @@ const IngredientPickerModal = ({
             filtered.map((ing) => (
               <button
                 key={ing.id}
+                // ★ 修正 4: 這裡確保 onSelect 存在才執行，防止點擊崩潰
                 onClick={() => {
-                  onSelect(ing.id);
+                  if (onSelect) onSelect(ing.id);
                   onClose();
                 }}
                 className="w-full text-left p-3 rounded-xl bg-slate-800 border border-slate-700 hover:border-amber-500 flex justify-between items-center group transition-colors"
@@ -3530,10 +3508,11 @@ const EditorSheet = ({
     setPickerTargetIndex(null);
   };
 
+  // ★ 修正: 加上 categorySubItems 是否存在的檢查，防止讀取 undefined 屬性時崩潰
   const currentSubOptions =
     mode === 'ingredient' && categorySubItems
-      ? categorySubItems[item.type] || []
-      : categorySubItems['alcohol'] || [];
+      ? (categorySubItems[item.type] || [])
+      : (categorySubItems && categorySubItems['alcohol'] ? categorySubItems['alcohol'] : []);
 
   return (
     <div className="fixed inset-0 z-50 flex justify-end">
