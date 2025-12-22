@@ -419,7 +419,7 @@ const safeString = (str) => (str || '').toString();
 // ==========================================
 // ★ 版本號設定 (修改這裡會同步更新登入頁與設定頁)
 // ==========================================
-const APP_VERSION = 'v16.3 (完整修復版)';
+const APP_VERSION = 'v16.1 (完整修復版)';
 const safeNumber = (num) => {
   const n = parseFloat(num);
   return isNaN(n) ? 0 : n;
@@ -4846,24 +4846,33 @@ const LoginScreen = ({ onLogin }) => {
     let hasRun = false;
     
     const handleRedirectResult = async () => {
+      console.log('[Redirect] useEffect triggered');
+      console.log('[Redirect] User agent:', navigator.userAgent);
+      console.log('[Redirect] Standalone mode:', window.navigator.standalone ? 'YES' : 'NO');
+      
       // 防止同一個 effect 中多次執行
       if (hasRun) {
-        console.log('[Redirect] Already ran');
+        console.log('[Redirect] Already ran in this effect');
         return;
       }
       hasRun = true;
       
       if (!window.firebase) {
-        console.log('[Redirect] Firebase not ready');
+        console.log('[Redirect] Firebase not ready, will retry');
         return;
       }
+      
+      console.log('[Redirect] Firebase ready, checking for pending action...');
       
       // 檢查是否有待處理的 Google 驗證
       const action = localStorage.getItem('google_auth_action');
       const timestamp = localStorage.getItem('google_auth_timestamp');
       
+      console.log('[Redirect] localStorage action:', action);
+      console.log('[Redirect] localStorage timestamp:', timestamp);
+      
       if (!action) {
-        console.log('[Redirect] No pending action');
+        console.log('[Redirect] No pending action, exiting');
         return;
       }
       
@@ -5040,9 +5049,15 @@ const LoginScreen = ({ onLogin }) => {
     setLoading(true);
     setError('');
     
+    console.log('[Login] Starting Google login...');
+    console.log('[Login] User agent:', navigator.userAgent);
+    console.log('[Login] Standalone mode:', window.navigator.standalone ? 'YES' : 'NO');
+    
     try {
       const auth = window.firebase.auth();
       const provider = new window.firebase.auth.GoogleAuthProvider();
+      
+      console.log('[Login] Attempting Popup...');
       
       try {
         // 先嘗試 Popup 模式（電腦瀏覽器適用）
@@ -5074,18 +5089,28 @@ const LoginScreen = ({ onLogin }) => {
         
       } catch (popupError) {
         // Popup 失敗，改用 Redirect 模式
+        console.log('[Login] Popup failed, error code:', popupError.code);
+        console.log('[Login] Popup error message:', popupError.message);
+        
         if (popupError.code === 'auth/popup-blocked' || 
-            popupError.code === 'auth/popup-closed-by-user') {
+            popupError.code === 'auth/popup-closed-by-user' ||
+            popupError.code === 'auth/cancelled-popup-request') {
+          
+          console.log('[Login] Switching to Redirect mode...');
           
           // 標記這是登入流程（用於 redirect 回來後識別）
           localStorage.setItem('google_auth_action', 'login');
           localStorage.setItem('google_auth_timestamp', Date.now().toString());
+          
+          console.log('[Login] Markers set, action:', localStorage.getItem('google_auth_action'));
+          console.log('[Login] Calling signInWithRedirect...');
           
           // 使用 redirect 模式
           await auth.signInWithRedirect(provider);
           // 注意：這裡會跳轉，不會執行下面的程式碼
           
         } else {
+          console.log('[Login] Unknown error, throwing...');
           throw popupError; // 其他錯誤，拋出到外層處理
         }
       }
