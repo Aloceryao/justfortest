@@ -419,7 +419,7 @@ const safeString = (str) => (str || '').toString();
 // ==========================================
 // ★ 版本號設定 (修改這裡會同步更新登入頁與設定頁)
 // ==========================================
-const APP_VERSION = 'v16.8 (完整修復版)';
+const APP_VERSION = 'v16.9 (完整修復版)';
 const safeNumber = (num) => {
   const n = parseFloat(num);
   return isNaN(n) ? 0 : n;
@@ -4843,82 +4843,89 @@ const LoginScreen = ({ onLogin }) => {
 
   // 處理 Google Redirect 回來的結果
   useEffect(() => {
-    // 防止重複執行
-    const alreadyProcessed = sessionStorage.getItem('redirect_processed');
-    if (alreadyProcessed === 'true') {
-      return;
-    }
+    let hasRun = false;
     
     const handleRedirectResult = async () => {
+      // 防止同一個 effect 中多次執行
+      if (hasRun) {
+        console.log('Already ran in this effect');
+        return;
+      }
+      hasRun = true;
+      
       if (!window.firebase) {
-        console.log('Firebase not ready');
+        console.log('[Redirect] Firebase not ready');
         return;
       }
       
       // 檢查是否有待處理的 Google 驗證
       const action = localStorage.getItem('google_auth_action');
       if (!action) {
-        console.log('No pending Google auth');
+        console.log('[Redirect] No pending Google auth');
         return;
       }
       
-      console.log('Processing redirect result, action:', action);
+      console.log('[Redirect] Found action:', action);
+      console.log('[Redirect] Calling getRedirectResult...');
       
       try {
         const auth = window.firebase.auth();
         const result = await auth.getRedirectResult();
         
-        console.log('Redirect result:', result.user ? 'User found' : 'No user');
+        console.log('[Redirect] Result received');
+        console.log('[Redirect] User:', result.user ? 'YES' : 'NO');
+        console.log('[Redirect] Credential:', result.credential ? 'YES' : 'NO');
         
         if (result.user) {
-          // 標記為已處理，防止重複執行
-          sessionStorage.setItem('redirect_processed', 'true');
-          
           const userId = result.user.uid;
           const userEmail = result.user.email;
           
-          console.log('User email:', userEmail);
+          console.log('[Redirect] User ID:', userId);
+          console.log('[Redirect] User Email:', userEmail);
           
-          // 清除標記
+          // 清除 action 標記（重要：立即清除，防止重複執行）
           localStorage.removeItem('google_auth_action');
           
           const db = window.firebase.firestore();
+          console.log('[Redirect] Fetching user doc...');
           const userDoc = await db.collection('users').doc(userId).get();
           
-          console.log('User doc exists:', userDoc.exists);
+          console.log('[Redirect] User doc exists:', userDoc.exists);
           
           if (action === 'login') {
             // 登入流程
             if (!userDoc.exists || !userDoc.data().shopId) {
+              console.log('[Redirect] User not registered');
               await auth.signOut();
-              sessionStorage.removeItem('redirect_processed');
               setError('此 Google 帳號尚未註冊。請點擊下方「註冊新商店」進行註冊');
               setMode('select');
               return;
             }
             const userShopId = userDoc.data().shopId;
-            console.log('Logging in with shopId:', userShopId);
+            console.log('[Redirect] Logging in with shopId:', userShopId);
             onLogin(userShopId, 'owner');
             
           } else if (action === 'register') {
             // 註冊流程
             if (userDoc.exists && userDoc.data().shopId) {
+              console.log('[Redirect] User already registered');
               await auth.signOut();
-              sessionStorage.removeItem('redirect_processed');
               setError('此 Google 帳號已註冊。請返回登入頁面進行登入');
               setMode('select');
               return;
             }
             // 進入填寫商店資料流程
-            console.log('Entering Google register mode');
+            console.log('[Redirect] Entering Google register mode');
             setEmail(userEmail);
             setMode('google-register');
-            sessionStorage.removeItem('redirect_processed');
           }
+        } else {
+          console.log('[Redirect] No user in result - this might be normal if no redirect happened');
+          // 如果沒有用戶但有 action 標記，可能是頁面被刷新了
+          // 不清除 action 標記，讓用戶可以重新嘗試
         }
       } catch (e) {
-        console.error('Redirect result error:', e);
-        sessionStorage.removeItem('redirect_processed');
+        console.error('[Redirect] Error:', e);
         localStorage.removeItem('google_auth_action');
         if (e.code !== 'auth/popup-closed-by-user') {
           setError('Google 驗證失敗：' + e.message);
@@ -4926,8 +4933,8 @@ const LoginScreen = ({ onLogin }) => {
       }
     };
     
-    // 延遲一點執行，確保 Firebase 完全初始化
-    const timer = setTimeout(handleRedirectResult, 500);
+    // 延遲執行，確保 Firebase 完全初始化
+    const timer = setTimeout(handleRedirectResult, 1000);
     return () => clearTimeout(timer);
   }, [onLogin]);
 
@@ -6270,8 +6277,9 @@ const handleUpdateGridCategory = (updatedCat) => {
     localStorage.setItem('bar_shop_id', sid);
     localStorage.setItem('bar_user_role', role);
     setActiveTab('recipes');
-    // 清除 redirect 處理標記
-    sessionStorage.removeItem('redirect_processed');
+    // 清除所有 redirect 相關標記
+    sessionStorage.removeItem('redirect_processed_login');
+    sessionStorage.removeItem('redirect_processed_register');
     console.log('Login completed');
   };
 
@@ -6279,7 +6287,8 @@ const handleUpdateGridCategory = (updatedCat) => {
     setIsLoggedIn(false);
     localStorage.removeItem('bar_user_role');
     localStorage.removeItem('google_auth_action');
-    sessionStorage.removeItem('redirect_processed');
+    sessionStorage.removeItem('redirect_processed_login');
+    sessionStorage.removeItem('redirect_processed_register');
     setShopId('');
     setIngredients([]);
     setRecipes([]);
