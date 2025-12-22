@@ -5044,23 +5044,61 @@ const LoginScreen = ({ onLogin }) => {
       const auth = window.firebase.auth();
       const provider = new window.firebase.auth.GoogleAuthProvider();
       
-      // 清除舊的標記
-      localStorage.removeItem('google_auth_action');
-      localStorage.removeItem('google_auth_timestamp');
+      console.log('[Login] Attempting Google login with Popup first...');
       
-      // 標記這是登入流程（用於 redirect 回來後識別）
-      localStorage.setItem('google_auth_action', 'login');
-      localStorage.setItem('google_auth_timestamp', Date.now().toString());
-      
-      console.log('[Login] Starting Google redirect...');
-      
-      // 使用 redirect 模式（適合 Web App / 主畫面模式）
-      await auth.signInWithRedirect(provider);
-      // 注意：這裡會跳轉，不會執行下面的程式碼
+      try {
+        // 先嘗試 Popup 模式（電腦瀏覽器適用）
+        const result = await auth.signInWithPopup(provider);
+        const userId = result.user.uid;
+        const userEmail = result.user.email;
+        
+        console.log('[Login] Popup success, checking user doc...');
+        
+        // 檢查是否已綁定商店
+        const db = window.firebase.firestore();
+        const userDoc = await db.collection('users').doc(userId).get();
+        
+        if (!userDoc.exists || !userDoc.data().shopId) {
+          // 未註冊的用戶，登出並提示去註冊
+          await auth.signOut();
+          setError('此 Google 帳號尚未註冊。請點擊下方「註冊新商店」進行註冊');
+          setLoading(false);
+          return;
+        }
+        
+        const userShopId = userDoc.data().shopId;
+        console.log('[Login] Logging in with shopId:', userShopId);
+        onLogin(userShopId, 'owner');
+        
+      } catch (popupError) {
+        // Popup 失敗，改用 Redirect 模式
+        if (popupError.code === 'auth/popup-blocked' || 
+            popupError.code === 'auth/popup-closed-by-user') {
+          
+          console.log('[Login] Popup blocked/closed, switching to Redirect...');
+          
+          // 標記這是登入流程（用於 redirect 回來後識別）
+          localStorage.setItem('google_auth_action', 'login');
+          localStorage.setItem('google_auth_timestamp', Date.now().toString());
+          
+          // 使用 redirect 模式
+          await auth.signInWithRedirect(provider);
+          // 注意：這裡會跳轉，不會執行下面的程式碼
+          
+        } else {
+          throw popupError; // 其他錯誤，拋出到外層處理
+        }
+      }
       
     } catch (e) {
-      console.error('Google login error:', e);
-      setError('Google 登入失敗：' + e.message);
+      console.error('[Login] Error:', e);
+      if (e.code === 'auth/popup-closed-by-user') {
+        setError('已取消登入');
+      } else if (e.code === 'auth/popup-blocked') {
+        setError('彈出視窗被封鎖，請在新分頁中開啟或允許彈出視窗');
+      } else {
+        setError('Google 登入失敗：' + e.message);
+      }
       setLoading(false);
     }
   };
@@ -5074,23 +5112,62 @@ const LoginScreen = ({ onLogin }) => {
       const auth = window.firebase.auth();
       const provider = new window.firebase.auth.GoogleAuthProvider();
       
-      // 清除舊的標記
-      localStorage.removeItem('google_auth_action');
-      localStorage.removeItem('google_auth_timestamp');
+      console.log('[Register] Attempting Google register with Popup first...');
       
-      // 標記這是註冊流程（用於 redirect 回來後識別）
-      localStorage.setItem('google_auth_action', 'register');
-      localStorage.setItem('google_auth_timestamp', Date.now().toString());
-      
-      console.log('[Register] Starting Google redirect...');
-      
-      // 使用 redirect 模式（適合 Web App / 主畫面模式）
-      await auth.signInWithRedirect(provider);
-      // 注意：這裡會跳轉，不會執行下面的程式碼
+      try {
+        // 先嘗試 Popup 模式
+        const result = await auth.signInWithPopup(provider);
+        const userId = result.user.uid;
+        const userEmail = result.user.email;
+        
+        console.log('[Register] Popup success, checking user doc...');
+        
+        // 檢查是否已經註冊過
+        const db = window.firebase.firestore();
+        const userDoc = await db.collection('users').doc(userId).get();
+        
+        if (userDoc.exists && userDoc.data().shopId) {
+          // 已經註冊過，提示去登入
+          await auth.signOut();
+          setError('此 Google 帳號已註冊。請返回登入頁面進行登入');
+          setLoading(false);
+          return;
+        }
+        
+        // 首次註冊，進入填寫商店資料流程
+        console.log('[Register] Entering register flow');
+        setEmail(userEmail);
+        setMode('google-register');
+        setLoading(false);
+        
+      } catch (popupError) {
+        // Popup 失敗，改用 Redirect 模式
+        if (popupError.code === 'auth/popup-blocked' || 
+            popupError.code === 'auth/popup-closed-by-user') {
+          
+          console.log('[Register] Popup blocked/closed, switching to Redirect...');
+          
+          // 標記這是註冊流程
+          localStorage.setItem('google_auth_action', 'register');
+          localStorage.setItem('google_auth_timestamp', Date.now().toString());
+          
+          // 使用 redirect 模式
+          await auth.signInWithRedirect(provider);
+          
+        } else {
+          throw popupError; // 其他錯誤，拋出到外層處理
+        }
+      }
       
     } catch (e) {
-      console.error('Google register start error:', e);
-      setError('Google 註冊失敗：' + e.message);
+      console.error('[Register] Error:', e);
+      if (e.code === 'auth/popup-closed-by-user') {
+        setError('已取消註冊');
+      } else if (e.code === 'auth/popup-blocked') {
+        setError('彈出視窗被封鎖，請在新分頁中開啟或允許彈出視窗');
+      } else {
+        setError('Google 註冊失敗：' + e.message);
+      }
       setLoading(false);
     }
   };
