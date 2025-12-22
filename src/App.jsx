@@ -419,7 +419,7 @@ const safeString = (str) => (str || '').toString();
 // ==========================================
 // ★ 版本號設定 (修改這裡會同步更新登入頁與設定頁)
 // ==========================================
-const APP_VERSION = 'v16.1 (完整修復版)';
+const APP_VERSION = 'v16.2 (完整修復版)';
 const safeNumber = (num) => {
   const n = parseFloat(num);
   return isNaN(n) ? 0 : n;
@@ -4863,11 +4863,20 @@ const LoginScreen = ({ onLogin }) => {
       try {
         const auth = window.firebase.auth();
         console.log('[Redirect] 呼叫 getRedirectResult...');
+        console.log('[Redirect] 當前 URL:', window.location.href);
+        console.log('[Redirect] sessionStorage google_auth_mode:', sessionStorage.getItem('google_auth_mode'));
+        
         const result = await auth.getRedirectResult();
         
         console.log('[Redirect] getRedirectResult 完成');
+        console.log('[Redirect] Result object:', result);
         console.log('[Redirect] User:', result.user ? 'YES' : 'NO');
         console.log('[Redirect] Credential:', result.credential ? 'YES' : 'NO');
+        
+        if (result.user) {
+          console.log('[Redirect] User UID:', result.user.uid);
+          console.log('[Redirect] User Email:', result.user.email);
+        }
         
         // 如果沒有 user，表示不是從 redirect 回來的，或已經處理過了
         if (!result.user) {
@@ -5024,13 +5033,18 @@ const LoginScreen = ({ onLogin }) => {
       
       // 使用 Redirect 模式（手機和電腦都適用）
       // 標記這是登入流程（用 sessionStorage，iOS 跳轉時會保留）
+      console.log('[Google Login] 當前 URL:', window.location.href);
       console.log('[Google Login] 設定 sessionStorage: google_auth_mode = login');
       sessionStorage.setItem('google_auth_mode', 'login');
       console.log('[Google Login] sessionStorage 設定完成');
       console.log('[Google Login] 檢查 sessionStorage:', sessionStorage.getItem('google_auth_mode'));
       
+      // 檢查 Firebase Auth 狀態
+      console.log('[Google Login] Firebase Auth 當前用戶:', auth.currentUser);
+      
       // 跳轉到 Google 驗證（之後的程式碼不會執行）
       console.log('[Google Login] 呼叫 signInWithRedirect...');
+      console.log('[Google Login] Provider:', provider);
       await auth.signInWithRedirect(provider);
       console.log('[Google Login] signInWithRedirect 完成（這行不應該出現）');
       
