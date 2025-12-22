@@ -419,7 +419,7 @@ const safeString = (str) => (str || '').toString();
 // ==========================================
 // ★ 版本號設定 (修改這裡會同步更新登入頁與設定頁)
 // ==========================================
-const APP_VERSION = 'v16.10 (登入測試完整版)';
+const APP_VERSION = 'v16.10.1 (登入測試完整版)';
 const safeNumber = (num) => {
   const n = parseFloat(num);
   return isNaN(n) ? 0 : n;
@@ -2795,15 +2795,26 @@ const InventoryScreen = ({
   );
 };
 
-// ==========================================
-// ★ 補回遺失的 IngredientPickerModal 元件
-// ==========================================
+// 原本的程式碼可能長這樣：
+/*
 const IngredientPickerModal = ({
   isOpen,
   onClose,
   onSelect,
   ingredients,
-  categories, // 接收分類
+  categories, 
+  availableBases,
+}) => {
+  // ...
+*/
+
+// 🔥 請修改為以下版本：
+const IngredientPickerModal = ({
+  isOpen,
+  onClose,
+  onSelect,
+  ingredients = [], // 1. 改這裡：加上預設值，防止 undefined 傳入
+  categories, 
   availableBases,
 }) => {
   const [searchTerm, setSearchTerm] = useState('');
@@ -2813,13 +2824,22 @@ const IngredientPickerModal = ({
 
   // 取得所有不重複的子分類 (用於篩選)
   const subTypes = useMemo(() => {
+    // 2. 改這裡：加上安全檢查，確保 ingredients 是陣列
+    if (!Array.isArray(ingredients)) return []; 
+    
     const list = ingredients
+      .filter(i => i) // 過濾掉可能的 null/undefined 項目
       .map((i) => i.subType)
       .filter((t) => t && t.trim() !== '');
     return [...new Set(list)];
   }, [ingredients]);
 
-  const filtered = ingredients.filter((ing) => {
+  // 3. 改這裡：加上安全檢查，防止 filter 崩潰
+  const safeIngredients = Array.isArray(ingredients) ? ingredients : [];
+  
+  const filtered = safeIngredients.filter((ing) => {
+    if (!ing) return false; // 關鍵：如果材料本身是 null，直接跳過
+
     const matchSearch =
       safeString(ing.nameZh).includes(searchTerm) ||
       safeString(ing.nameEn).toLowerCase().includes(searchTerm.toLowerCase());
@@ -6099,28 +6119,45 @@ const handleAutoCreateGridBlock = (newBaseName) => {
     localStorage.setItem('bar_grid_cats_v9', JSON.stringify(gridCategories));
   }, [gridCategories]);
 
-  const handleAddGridCategory = (newCat) => {
-    // 自動判斷是否為軟飲
-    if (!newCat.targetBase) {
-      if (newCat.nameZh.includes('軟') || newCat.nameEn.toLowerCase().includes('soft')) {
-        newCat.targetBase = 'TYPE_SOFT';
-        newCat.iconType = 'soft';
-      }
+// ★ 新增：同步存檔函式
+const saveGridToCloud = (newCats) => {
+  setGridCategories(newCats);
+  localStorage.setItem('bar_grid_cats_v9', JSON.stringify(newCats));
+
+  if (window.firebase && shopId) {
+    window.firebase.firestore()
+      .collection('shops')
+      .doc(shopId)
+      .collection('settings')
+      .doc('grid_config')
+      .set({ categories: newCats }, { merge: true })
+      .catch(err => console.error("方塊同步失敗:", err));
+  }
+};
+
+const handleAddGridCategory = (newCat) => {
+  // 自動判斷是否為軟飲
+  if (!newCat.targetBase) {
+    if (newCat.nameZh.includes('軟') || newCat.nameEn.toLowerCase().includes('soft')) {
+      newCat.targetBase = 'TYPE_SOFT';
+      newCat.iconType = 'soft';
     }
-    setGridCategories([...gridCategories, newCat]);
-  };
+  }
+  // ★ 改用 saveGridToCloud
+  const updated = [...gridCategories, newCat];
+  saveGridToCloud(updated);
+};
 
-// 1. 這是刪除 (原本就有的)
 const handleDeleteGridCategory = (id) => {
-  if (confirm(`確定移除此方塊嗎？`))
-    setGridCategories(gridCategories.filter((c) => c.id !== id));
-}; 
+  if (confirm(`確定移除此方塊嗎？`)) {
+    const updated = gridCategories.filter((c) => c.id !== id);
+    saveGridToCloud(updated);
+  }
+};
 
-// 2. 這是更新功能 (放在刪除功能的「下面」，彼此分開)
 const handleUpdateGridCategory = (updatedCat) => {
-  setGridCategories((prev) =>
-    prev.map((cat) => (cat.id === updatedCat.id ? updatedCat : cat))
-  );
+  const updated = gridCategories.map((cat) => (cat.id === updatedCat.id ? updatedCat : cat));
+  saveGridToCloud(updated);
 };
   // ★ 修改：加入讀取與儲存功能，讓大分類不會重整後消失
   const [ingCategories, setIngCategories] = useState(() => {
@@ -6335,13 +6372,32 @@ const handleUpdateGridCategory = (updatedCat) => {
             setStaffList([]);
           }
         );
-      return () => {
-        unsubIng();
-        unsubRec();
-        unsubFood();
-        unsubSec();
-        unsubConfig();
-      };
+    
+    // 🟢 在這裡插入這段 (開始)
+    const unsubGrid = db
+      .collection('shops')
+      .doc(shopId)
+      .collection('settings')
+      .doc('grid_config')
+      .onSnapshot(
+        (doc) => {
+          if (doc.exists && doc.data().categories) {
+            setGridCategories(doc.data().categories);
+            localStorage.setItem('bar_grid_cats_v9', JSON.stringify(doc.data().categories));
+          }
+        },
+        (error) => console.error('Grid config error:', error)
+      );
+    // 🟢 (結束)
+
+    return () => {
+      unsubIng();
+      unsubRec();
+      unsubFood();
+      unsubSec();
+      unsubConfig();
+      unsubGrid(); // 🟢 記得在 return 裡面加上這一行！
+    };
     } else {
       try {
         const i = localStorage.getItem('bar_ingredients_v3');
