@@ -419,7 +419,7 @@ const safeString = (str) => (str || '').toString();
 // ==========================================
 // ★ 版本號設定 (修改這裡會同步更新登入頁與設定頁)
 // ==========================================
-const APP_VERSION = 'v16.3 (完整修復版)';
+const APP_VERSION = 'v16.4 (完整修復版)';
 const safeNumber = (num) => {
   const n = parseFloat(num);
   return isNaN(n) ? 0 : n;
@@ -4847,9 +4847,9 @@ const LoginScreen = ({ onLogin }) => {
   // 處理 Google Redirect 回來的結果
   useEffect(() => {
     const handleRedirectResult = async () => {
-      // 雙重檢查：useRef 和 sessionStorage 都檢查
-      if (hasProcessedRedirect.current || sessionStorage.getItem('redirect_processed') === 'true') {
-        console.log('[Redirect] 已執行過，跳過');
+      // 只檢查 useRef（本次頁面加載是否已處理過）
+      if (hasProcessedRedirect.current) {
+        console.log('[Redirect] 本次頁面加載已處理過，跳過');
         return;
       }
       
@@ -4860,8 +4860,8 @@ const LoginScreen = ({ onLogin }) => {
         return;
       }
       
-      hasProcessedRedirect.current = true; // 標記已執行（整個生命週期都有效）
-      sessionStorage.setItem('redirect_processed', 'true'); // 標記已處理（跨渲染有效）
+      // 先標記為已執行，避免在處理過程中重複執行
+      hasProcessedRedirect.current = true;
       
       try {
         const auth = window.firebase.auth();
@@ -5041,7 +5041,6 @@ const LoginScreen = ({ onLogin }) => {
       console.log('[Google Login] 當前 URL:', window.location.href);
       console.log('[Google Login] 設定 sessionStorage: google_auth_mode = login');
       sessionStorage.setItem('google_auth_mode', 'login');
-      sessionStorage.removeItem('redirect_processed'); // 清除舊的處理標記，允許處理新的 redirect
       console.log('[Google Login] sessionStorage 設定完成');
       console.log('[Google Login] 檢查 sessionStorage:', sessionStorage.getItem('google_auth_mode'));
       
@@ -5078,7 +5077,6 @@ const LoginScreen = ({ onLogin }) => {
       // 使用 Redirect 模式（手機和電腦都適用）
       // 標記這是註冊流程（用 sessionStorage，iOS 跳轉時會保留）
       sessionStorage.setItem('google_auth_mode', 'register');
-      sessionStorage.removeItem('redirect_processed'); // 清除舊的處理標記，允許處理新的 redirect
       
       // 跳轉到 Google 驗證（之後的程式碼不會執行）
       await auth.signInWithRedirect(provider);
