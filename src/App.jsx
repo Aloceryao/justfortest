@@ -419,7 +419,7 @@ const safeString = (str) => (str || '').toString();
 // ==========================================
 // ★ 版本號設定 (修改這裡會同步更新登入頁與設定頁)
 // ==========================================
-const APP_VERSION = 'v16.7 (完整修復版)';
+const APP_VERSION = 'v16.8 (完整修復版)';
 const safeNumber = (num) => {
   const n = parseFloat(num);
   return isNaN(n) ? 0 : n;
@@ -4843,17 +4843,41 @@ const LoginScreen = ({ onLogin }) => {
 
   // 處理 Google Redirect 回來的結果
   useEffect(() => {
+    // 防止重複執行
+    const alreadyProcessed = sessionStorage.getItem('redirect_processed');
+    if (alreadyProcessed === 'true') {
+      return;
+    }
+    
     const handleRedirectResult = async () => {
-      if (!window.firebase) return;
+      if (!window.firebase) {
+        console.log('Firebase not ready');
+        return;
+      }
+      
+      // 檢查是否有待處理的 Google 驗證
+      const action = localStorage.getItem('google_auth_action');
+      if (!action) {
+        console.log('No pending Google auth');
+        return;
+      }
+      
+      console.log('Processing redirect result, action:', action);
       
       try {
         const auth = window.firebase.auth();
         const result = await auth.getRedirectResult();
         
+        console.log('Redirect result:', result.user ? 'User found' : 'No user');
+        
         if (result.user) {
+          // 標記為已處理，防止重複執行
+          sessionStorage.setItem('redirect_processed', 'true');
+          
           const userId = result.user.uid;
           const userEmail = result.user.email;
-          const action = localStorage.getItem('google_auth_action');
+          
+          console.log('User email:', userEmail);
           
           // 清除標記
           localStorage.removeItem('google_auth_action');
@@ -4861,39 +4885,50 @@ const LoginScreen = ({ onLogin }) => {
           const db = window.firebase.firestore();
           const userDoc = await db.collection('users').doc(userId).get();
           
+          console.log('User doc exists:', userDoc.exists);
+          
           if (action === 'login') {
             // 登入流程
             if (!userDoc.exists || !userDoc.data().shopId) {
               await auth.signOut();
+              sessionStorage.removeItem('redirect_processed');
               setError('此 Google 帳號尚未註冊。請點擊下方「註冊新商店」進行註冊');
               setMode('select');
               return;
             }
             const userShopId = userDoc.data().shopId;
+            console.log('Logging in with shopId:', userShopId);
             onLogin(userShopId, 'owner');
             
           } else if (action === 'register') {
             // 註冊流程
             if (userDoc.exists && userDoc.data().shopId) {
               await auth.signOut();
+              sessionStorage.removeItem('redirect_processed');
               setError('此 Google 帳號已註冊。請返回登入頁面進行登入');
               setMode('select');
               return;
             }
             // 進入填寫商店資料流程
+            console.log('Entering Google register mode');
             setEmail(userEmail);
             setMode('google-register');
+            sessionStorage.removeItem('redirect_processed');
           }
         }
       } catch (e) {
         console.error('Redirect result error:', e);
+        sessionStorage.removeItem('redirect_processed');
+        localStorage.removeItem('google_auth_action');
         if (e.code !== 'auth/popup-closed-by-user') {
           setError('Google 驗證失敗：' + e.message);
         }
       }
     };
     
-    handleRedirectResult();
+    // 延遲一點執行，確保 Firebase 完全初始化
+    const timer = setTimeout(handleRedirectResult, 500);
+    return () => clearTimeout(timer);
   }, [onLogin]);
 
   // 店員模式：自動載入店員名單
@@ -6228,17 +6263,23 @@ const handleUpdateGridCategory = (updatedCat) => {
   }, [shopId, isLoggedIn, firebaseReady]);
 
   const handleLogin = (sid, role) => {
+    console.log('handleLogin called with shopId:', sid, 'role:', role);
     setShopId(sid);
     setUserRole(role);
     setIsLoggedIn(true);
     localStorage.setItem('bar_shop_id', sid);
     localStorage.setItem('bar_user_role', role);
     setActiveTab('recipes');
+    // 清除 redirect 處理標記
+    sessionStorage.removeItem('redirect_processed');
+    console.log('Login completed');
   };
 
   const handleLogout = () => {
     setIsLoggedIn(false);
     localStorage.removeItem('bar_user_role');
+    localStorage.removeItem('google_auth_action');
+    sessionStorage.removeItem('redirect_processed');
     setShopId('');
     setIngredients([]);
     setRecipes([]);
