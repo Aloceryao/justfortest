@@ -419,7 +419,7 @@ const safeString = (str) => (str || '').toString();
 // ==========================================
 // ★ 版本號設定 (修改這裡會同步更新登入頁與設定頁)
 // ==========================================
-const APP_VERSION = 'v16.5 (完整修復版)';
+const APP_VERSION = 'v16.6 (完整修復版)';
 const safeNumber = (num) => {
   const n = parseFloat(num);
   return isNaN(n) ? 0 : n;
@@ -4864,12 +4864,21 @@ const LoginScreen = ({ onLogin }) => {
       
       console.log('[Redirect] Firebase ready, checking for pending action...');
       
-      // 檢查是否有待處理的 Google 驗證
-      const action = localStorage.getItem('google_auth_action');
-      const timestamp = localStorage.getItem('google_auth_timestamp');
+      // 優先檢查 URL 參數（適用於 iOS 主畫面 APP）
+      const urlParams = new URLSearchParams(window.location.search);
+      let action = urlParams.get('google_auth');
+      let timestamp = urlParams.get('auth_time');
       
-      console.log('[Redirect] localStorage action:', action);
-      console.log('[Redirect] localStorage timestamp:', timestamp);
+      console.log('[Redirect] URL param action:', action);
+      console.log('[Redirect] URL param timestamp:', timestamp);
+      
+      // 如果 URL 參數沒有，再檢查 localStorage（向後相容）
+      if (!action) {
+        action = localStorage.getItem('google_auth_action');
+        timestamp = localStorage.getItem('google_auth_timestamp');
+        console.log('[Redirect] localStorage action:', action);
+        console.log('[Redirect] localStorage timestamp:', timestamp);
+      }
       
       if (!action) {
         console.log('[Redirect] No pending action, exiting');
@@ -4888,6 +4897,12 @@ const LoginScreen = ({ onLogin }) => {
           console.log('[Redirect] Action expired, clearing');
           localStorage.removeItem('google_auth_action');
           localStorage.removeItem('google_auth_timestamp');
+          
+          // 清除 URL 參數
+          const cleanUrl = new URL(window.location.href);
+          cleanUrl.searchParams.delete('google_auth');
+          cleanUrl.searchParams.delete('auth_time');
+          window.history.replaceState({}, '', cleanUrl.toString());
           return;
         }
       }
@@ -4911,6 +4926,13 @@ const LoginScreen = ({ onLogin }) => {
           // 清除標記（重要：立即清除，防止重複執行）
           localStorage.removeItem('google_auth_action');
           localStorage.removeItem('google_auth_timestamp');
+          
+          // 清除 URL 參數
+          const cleanUrl = new URL(window.location.href);
+          cleanUrl.searchParams.delete('google_auth');
+          cleanUrl.searchParams.delete('auth_time');
+          window.history.replaceState({}, '', cleanUrl.toString());
+          console.log('[Redirect] Cleaned URL params');
           
           const db = window.firebase.firestore();
           const userDoc = await db.collection('users').doc(userId).get();
@@ -4956,12 +4978,24 @@ const LoginScreen = ({ onLogin }) => {
             console.log('[Redirect] No credential, clearing markers');
             localStorage.removeItem('google_auth_action');
             localStorage.removeItem('google_auth_timestamp');
+            
+            // 清除 URL 參數
+            const cleanUrl = new URL(window.location.href);
+            cleanUrl.searchParams.delete('google_auth');
+            cleanUrl.searchParams.delete('auth_time');
+            window.history.replaceState({}, '', cleanUrl.toString());
           }
         }
       } catch (e) {
         console.error('[Redirect] Error:', e);
         localStorage.removeItem('google_auth_action');
         localStorage.removeItem('google_auth_timestamp');
+        
+        // 清除 URL 參數
+        const cleanUrl = new URL(window.location.href);
+        cleanUrl.searchParams.delete('google_auth');
+        cleanUrl.searchParams.delete('auth_time');
+        window.history.replaceState({}, '', cleanUrl.toString());
         if (e.code !== 'auth/popup-closed-by-user') {
           setError('Google 驗證失敗：' + e.message);
         }
@@ -5098,11 +5132,16 @@ const LoginScreen = ({ onLogin }) => {
           
           console.log('[Login] Switching to Redirect mode...');
           
-          // 標記這是登入流程（用於 redirect 回來後識別）
-          localStorage.setItem('google_auth_action', 'login');
-          localStorage.setItem('google_auth_timestamp', Date.now().toString());
+          // 使用 URL 參數標記（iOS 主畫面 APP 模式下 localStorage 會被清除）
+          const currentUrl = new URL(window.location.href);
+          currentUrl.searchParams.set('google_auth', 'login');
+          currentUrl.searchParams.set('auth_time', Date.now().toString());
           
-          console.log('[Login] Markers set, action:', localStorage.getItem('google_auth_action'));
+          console.log('[Login] Setting URL params:', currentUrl.toString());
+          
+          // 更新 URL（不重新載入頁面）
+          window.history.replaceState({}, '', currentUrl.toString());
+          
           console.log('[Login] Calling signInWithRedirect...');
           
           // 使用 redirect 模式
@@ -5169,11 +5208,22 @@ const LoginScreen = ({ onLogin }) => {
       } catch (popupError) {
         // Popup 失敗，改用 Redirect 模式
         if (popupError.code === 'auth/popup-blocked' || 
-            popupError.code === 'auth/popup-closed-by-user') {
+            popupError.code === 'auth/popup-closed-by-user' ||
+            popupError.code === 'auth/cancelled-popup-request') {
           
-          // 標記這是註冊流程
-          localStorage.setItem('google_auth_action', 'register');
-          localStorage.setItem('google_auth_timestamp', Date.now().toString());
+          console.log('[Register] Popup blocked/closed, switching to Redirect...');
+          
+          // 使用 URL 參數標記（iOS 主畫面 APP 模式下 localStorage 會被清除）
+          const currentUrl = new URL(window.location.href);
+          currentUrl.searchParams.set('google_auth', 'register');
+          currentUrl.searchParams.set('auth_time', Date.now().toString());
+          
+          console.log('[Register] Setting URL params:', currentUrl.toString());
+          
+          // 更新 URL（不重新載入頁面）
+          window.history.replaceState({}, '', currentUrl.toString());
+          
+          console.log('[Register] Calling signInWithRedirect...');
           
           // 使用 redirect 模式
           await auth.signInWithRedirect(provider);
@@ -6452,6 +6502,13 @@ const handleUpdateGridCategory = (updatedCat) => {
     localStorage.removeItem('google_auth_timestamp');
     sessionStorage.removeItem('redirect_processed_login');
     sessionStorage.removeItem('redirect_processed_register');
+    
+    // 清除 URL 參數
+    const cleanUrl = new URL(window.location.href);
+    cleanUrl.searchParams.delete('google_auth');
+    cleanUrl.searchParams.delete('auth_time');
+    window.history.replaceState({}, '', cleanUrl.toString());
+    
     setShopId('');
     setIngredients([]);
     setRecipes([]);
