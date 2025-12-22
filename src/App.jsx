@@ -419,7 +419,7 @@ const safeString = (str) => (str || '').toString();
 // ==========================================
 // ★ 版本號設定 (修改這裡會同步更新登入頁與設定頁)
 // ==========================================
-const APP_VERSION = 'v16.1 (完整修復版)';
+const APP_VERSION = 'v16.5 (IOS除錯版)';
 const safeNumber = (num) => {
   const n = parseFloat(num);
   return isNaN(n) ? 0 : n;
@@ -6226,6 +6226,29 @@ const handleUpdateGridCategory = (updatedCat) => {
       ];
     }
   });
+
+  // ========== 臨時除錯工具（iOS）==========
+  useEffect(() => {
+    // 只在 iOS 或移動設備上啟用 eruda
+    const isMobile = /iPhone|iPad|iPod|Android/i.test(navigator.userAgent);
+    
+    if (isMobile && !window.eruda) {
+      console.log('[Debug] Loading eruda for mobile debugging...');
+      const script = document.createElement('script');
+      script.src = 'https://cdn.jsdelivr.net/npm/eruda';
+      document.body.appendChild(script);
+      script.onload = () => {
+        if (window.eruda) {
+          window.eruda.init();
+          console.log('[Debug] Eruda initialized successfully!');
+          console.log('[Debug] 📱 點擊右下角的綠色按鈕可以看到 Console');
+        }
+      };
+      script.onerror = () => {
+        console.error('[Debug] Failed to load eruda');
+      };
+    }
+  }, []);
 
   useEffect(() => {
     localStorage.setItem(
