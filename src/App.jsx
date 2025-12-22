@@ -419,7 +419,7 @@ const safeString = (str) => (str || '').toString();
 // ==========================================
 // ★ 版本號設定 (修改這裡會同步更新登入頁與設定頁)
 // ==========================================
-const APP_VERSION = 'v16.6 (完整修復版)';
+const APP_VERSION = 'v16.7 (完整修復版)';
 const safeNumber = (num) => {
   const n = parseFloat(num);
   return isNaN(n) ? 0 : n;
@@ -4842,170 +4842,7 @@ const LoginScreen = ({ onLogin }) => {
   const [showHelp, setShowHelp] = useState(false);
 
   // 處理 Google Redirect 回來的結果
-  useEffect(() => {
-    let hasRun = false;
-    
-    const handleRedirectResult = async () => {
-      console.log('[Redirect] useEffect triggered');
-      console.log('[Redirect] User agent:', navigator.userAgent);
-      console.log('[Redirect] Standalone mode:', window.navigator.standalone ? 'YES' : 'NO');
-      
-      // 防止同一個 effect 中多次執行
-      if (hasRun) {
-        console.log('[Redirect] Already ran in this effect');
-        return;
-      }
-      hasRun = true;
-      
-      if (!window.firebase) {
-        console.log('[Redirect] Firebase not ready, will retry');
-        return;
-      }
-      
-      console.log('[Redirect] Firebase ready, checking for pending action...');
-      
-      // 優先檢查 URL 參數（適用於 iOS 主畫面 APP）
-      const urlParams = new URLSearchParams(window.location.search);
-      let action = urlParams.get('google_auth');
-      let timestamp = urlParams.get('auth_time');
-      
-      console.log('[Redirect] URL param action:', action);
-      console.log('[Redirect] URL param timestamp:', timestamp);
-      
-      // 如果 URL 參數沒有，再檢查 localStorage（向後相容）
-      if (!action) {
-        action = localStorage.getItem('google_auth_action');
-        timestamp = localStorage.getItem('google_auth_timestamp');
-        console.log('[Redirect] localStorage action:', action);
-        console.log('[Redirect] localStorage timestamp:', timestamp);
-      }
-      
-      if (!action) {
-        console.log('[Redirect] No pending action, exiting');
-        return;
-      }
-      
-      console.log('[Redirect] Found action:', action);
-      
-      // 檢查時間戳（5 分鐘超時）
-      if (timestamp) {
-        const elapsed = Date.now() - parseInt(timestamp);
-        const minutes = Math.floor(elapsed / 60000);
-        console.log('[Redirect] Action started', minutes, 'minutes ago');
-        
-        if (elapsed > 5 * 60 * 1000) {
-          console.log('[Redirect] Action expired, clearing');
-          localStorage.removeItem('google_auth_action');
-          localStorage.removeItem('google_auth_timestamp');
-          
-          // 清除 URL 參數
-          const cleanUrl = new URL(window.location.href);
-          cleanUrl.searchParams.delete('google_auth');
-          cleanUrl.searchParams.delete('auth_time');
-          window.history.replaceState({}, '', cleanUrl.toString());
-          return;
-        }
-      }
-      
-      console.log('[Redirect] Calling getRedirectResult...');
-      
-      try {
-        const auth = window.firebase.auth();
-        const result = await auth.getRedirectResult();
-        
-        console.log('[Redirect] getRedirectResult completed');
-        console.log('[Redirect] User:', result.user ? 'YES' : 'NO');
-        console.log('[Redirect] Credential:', result.credential ? 'YES' : 'NO');
-        
-        if (result.user) {
-          const userId = result.user.uid;
-          const userEmail = result.user.email;
-          
-          console.log('[Redirect] Processing user:', userId);
-          
-          // 清除標記（重要：立即清除，防止重複執行）
-          localStorage.removeItem('google_auth_action');
-          localStorage.removeItem('google_auth_timestamp');
-          
-          // 清除 URL 參數
-          const cleanUrl = new URL(window.location.href);
-          cleanUrl.searchParams.delete('google_auth');
-          cleanUrl.searchParams.delete('auth_time');
-          window.history.replaceState({}, '', cleanUrl.toString());
-          console.log('[Redirect] Cleaned URL params');
-          
-          const db = window.firebase.firestore();
-          const userDoc = await db.collection('users').doc(userId).get();
-          
-          console.log('[Redirect] User doc exists:', userDoc.exists);
-          
-          if (action === 'login') {
-            // 登入流程
-            if (!userDoc.exists || !userDoc.data().shopId) {
-              console.log('[Redirect] User not registered');
-              await auth.signOut();
-              setError('此 Google 帳號尚未註冊。請點擊下方「註冊新商店」進行註冊');
-              setMode('select');
-              return;
-            }
-            const userShopId = userDoc.data().shopId;
-            console.log('[Redirect] Logging in with shopId:', userShopId);
-            onLogin(userShopId, 'owner');
-            
-          } else if (action === 'register') {
-            // 註冊流程
-            if (userDoc.exists && userDoc.data().shopId) {
-              console.log('[Redirect] User already registered');
-              await auth.signOut();
-              setError('此 Google 帳號已註冊。請返回登入頁面進行登入');
-              setMode('select');
-              return;
-            }
-            // 進入填寫商店資料流程
-            console.log('[Redirect] Entering google-register mode');
-            setEmail(userEmail);
-            setMode('google-register');
-          }
-        } else {
-          // 沒有用戶和 credential，可能是：
-          // 1. 正常頁面載入（沒有 redirect）
-          // 2. getRedirectResult 已經被調用過了
-          // 3. 舊的 action 標記
-          
-          console.log('[Redirect] No user in result');
-          
-          if (!result.credential) {
-            console.log('[Redirect] No credential, clearing markers');
-            localStorage.removeItem('google_auth_action');
-            localStorage.removeItem('google_auth_timestamp');
-            
-            // 清除 URL 參數
-            const cleanUrl = new URL(window.location.href);
-            cleanUrl.searchParams.delete('google_auth');
-            cleanUrl.searchParams.delete('auth_time');
-            window.history.replaceState({}, '', cleanUrl.toString());
-          }
-        }
-      } catch (e) {
-        console.error('[Redirect] Error:', e);
-        localStorage.removeItem('google_auth_action');
-        localStorage.removeItem('google_auth_timestamp');
-        
-        // 清除 URL 參數
-        const cleanUrl = new URL(window.location.href);
-        cleanUrl.searchParams.delete('google_auth');
-        cleanUrl.searchParams.delete('auth_time');
-        window.history.replaceState({}, '', cleanUrl.toString());
-        if (e.code !== 'auth/popup-closed-by-user') {
-          setError('Google 驗證失敗：' + e.message);
-        }
-      }
-    };
-    
-    // 延遲執行，確保 Firebase 完全初始化
-    const timer = setTimeout(handleRedirectResult, 1000);
-    return () => clearTimeout(timer);
-  }, [onLogin]);
+  // 移除 Redirect 處理（簡化為只使用 Popup 模式）
 
   // 店員模式：自動載入店員名單
   useEffect(() => {
@@ -5083,83 +4920,36 @@ const LoginScreen = ({ onLogin }) => {
     setLoading(true);
     setError('');
     
-    console.log('[Login] Starting Google login...');
-    console.log('[Login] User agent:', navigator.userAgent);
-    console.log('[Login] Standalone mode:', window.navigator.standalone ? 'YES' : 'NO');
-    
     try {
       const auth = window.firebase.auth();
       const provider = new window.firebase.auth.GoogleAuthProvider();
       
-      console.log('[Login] Attempting Popup...');
+      // 只使用 Popup 模式（簡單可靠）
+      const result = await auth.signInWithPopup(provider);
+      const userId = result.user.uid;
+      const userEmail = result.user.email;
       
-      try {
-        // 先嘗試 Popup 模式（電腦瀏覽器適用）
-        const result = await auth.signInWithPopup(provider);
-        const userId = result.user.uid;
-        const userEmail = result.user.email;
-        
-        console.log('[Login] Popup success, user:', userId);
-        
-        // 檢查是否已綁定商店
-        const db = window.firebase.firestore();
-        const userDoc = await db.collection('users').doc(userId).get();
-        
-        console.log('[Login] User doc exists:', userDoc.exists);
-        
-        if (!userDoc.exists || !userDoc.data().shopId) {
-          // 未註冊的用戶，登出並提示去註冊
-          console.log('[Login] User not registered, signing out');
-          await auth.signOut();
-          setError('此 Google 帳號尚未註冊。請點擊下方「註冊新商店」進行註冊');
-          setLoading(false);
-          return;
-        }
-        
-        const userShopId = userDoc.data().shopId;
-        console.log('[Login] Logging in with shopId:', userShopId);
-        onLogin(userShopId, 'owner');
-        // 登入成功後 loading 由 onLogin 觸發的頁面切換自動處理
-        
-      } catch (popupError) {
-        // Popup 失敗，改用 Redirect 模式
-        console.log('[Login] Popup failed, error code:', popupError.code);
-        console.log('[Login] Popup error message:', popupError.message);
-        
-        if (popupError.code === 'auth/popup-blocked' || 
-            popupError.code === 'auth/popup-closed-by-user' ||
-            popupError.code === 'auth/cancelled-popup-request') {
-          
-          console.log('[Login] Switching to Redirect mode...');
-          
-          // 使用 URL 參數標記（iOS 主畫面 APP 模式下 localStorage 會被清除）
-          const currentUrl = new URL(window.location.href);
-          currentUrl.searchParams.set('google_auth', 'login');
-          currentUrl.searchParams.set('auth_time', Date.now().toString());
-          
-          console.log('[Login] Setting URL params:', currentUrl.toString());
-          
-          // 更新 URL（不重新載入頁面）
-          window.history.replaceState({}, '', currentUrl.toString());
-          
-          console.log('[Login] Calling signInWithRedirect...');
-          
-          // 使用 redirect 模式
-          await auth.signInWithRedirect(provider);
-          // 注意：這裡會跳轉，不會執行下面的程式碼
-          
-        } else {
-          console.log('[Login] Unknown error, throwing...');
-          throw popupError; // 其他錯誤，拋出到外層處理
-        }
+      // 檢查是否已綁定商店
+      const db = window.firebase.firestore();
+      const userDoc = await db.collection('users').doc(userId).get();
+      
+      if (!userDoc.exists || !userDoc.data().shopId) {
+        // 未註冊的用戶，登出並提示去註冊
+        await auth.signOut();
+        setError('此 Google 帳號尚未註冊。請點擊下方「註冊新商店」進行註冊');
+        setLoading(false);
+        return;
       }
+      
+      const userShopId = userDoc.data().shopId;
+      onLogin(userShopId, 'owner');
       
     } catch (e) {
       console.error('[Login] Error:', e);
       if (e.code === 'auth/popup-closed-by-user') {
         setError('已取消登入');
       } else if (e.code === 'auth/popup-blocked') {
-        setError('彈出視窗被封鎖，請在新分頁中開啟或允許彈出視窗');
+        setError('彈出視窗被封鎖。建議：\n1. 允許彈出視窗\n2. 或用電腦瀏覽器登入\n3. 或使用 Email 密碼登入');
       } else {
         setError('Google 登入失敗：' + e.message);
       }
@@ -5176,69 +4966,34 @@ const LoginScreen = ({ onLogin }) => {
       const auth = window.firebase.auth();
       const provider = new window.firebase.auth.GoogleAuthProvider();
       
-      try {
-        // 先嘗試 Popup 模式
-        const result = await auth.signInWithPopup(provider);
-        const userId = result.user.uid;
-        const userEmail = result.user.email;
-        
-        console.log('[Register] Popup success, user:', userId);
-        
-        // 檢查是否已經註冊過
-        const db = window.firebase.firestore();
-        const userDoc = await db.collection('users').doc(userId).get();
-        
-        console.log('[Register] User doc exists:', userDoc.exists);
-        
-        if (userDoc.exists && userDoc.data().shopId) {
-          // 已經註冊過，提示去登入
-          console.log('[Register] User already registered');
-          await auth.signOut();
-          setError('此 Google 帳號已註冊。請返回登入頁面進行登入');
-          setLoading(false);
-          return;
-        }
-        
-        // 首次註冊，進入填寫商店資料流程
-        console.log('[Register] Entering google-register mode');
-        setEmail(userEmail);
-        setMode('google-register');
+      // 只使用 Popup 模式（簡單可靠）
+      const result = await auth.signInWithPopup(provider);
+      const userId = result.user.uid;
+      const userEmail = result.user.email;
+      
+      // 檢查是否已經註冊過
+      const db = window.firebase.firestore();
+      const userDoc = await db.collection('users').doc(userId).get();
+      
+      if (userDoc.exists && userDoc.data().shopId) {
+        // 已經註冊過，提示去登入
+        await auth.signOut();
+        setError('此 Google 帳號已註冊。請返回登入頁面進行登入');
         setLoading(false);
-        
-      } catch (popupError) {
-        // Popup 失敗，改用 Redirect 模式
-        if (popupError.code === 'auth/popup-blocked' || 
-            popupError.code === 'auth/popup-closed-by-user' ||
-            popupError.code === 'auth/cancelled-popup-request') {
-          
-          console.log('[Register] Popup blocked/closed, switching to Redirect...');
-          
-          // 使用 URL 參數標記（iOS 主畫面 APP 模式下 localStorage 會被清除）
-          const currentUrl = new URL(window.location.href);
-          currentUrl.searchParams.set('google_auth', 'register');
-          currentUrl.searchParams.set('auth_time', Date.now().toString());
-          
-          console.log('[Register] Setting URL params:', currentUrl.toString());
-          
-          // 更新 URL（不重新載入頁面）
-          window.history.replaceState({}, '', currentUrl.toString());
-          
-          console.log('[Register] Calling signInWithRedirect...');
-          
-          // 使用 redirect 模式
-          await auth.signInWithRedirect(provider);
-          
-        } else {
-          throw popupError; // 其他錯誤，拋出到外層處理
-        }
+        return;
       }
+      
+      // 首次註冊，進入填寫商店資料流程
+      setEmail(userEmail);
+      setMode('google-register');
+      setLoading(false);
       
     } catch (e) {
       console.error('[Register] Error:', e);
       if (e.code === 'auth/popup-closed-by-user') {
         setError('已取消註冊');
       } else if (e.code === 'auth/popup-blocked') {
-        setError('彈出視窗被封鎖，請在新分頁中開啟或允許彈出視窗');
+        setError('彈出視窗被封鎖。建議：\n1. 允許彈出視窗\n2. 或用電腦瀏覽器註冊\n3. 或使用 Email 密碼註冊');
       } else {
         setError('Google 註冊失敗：' + e.message);
       }
@@ -6490,25 +6245,11 @@ const handleUpdateGridCategory = (updatedCat) => {
     localStorage.setItem('bar_shop_id', sid);
     localStorage.setItem('bar_user_role', role);
     setActiveTab('recipes');
-    // 清除所有 redirect 相關標記
-    sessionStorage.removeItem('redirect_processed_login');
-    sessionStorage.removeItem('redirect_processed_register');
   };
 
   const handleLogout = () => {
     setIsLoggedIn(false);
     localStorage.removeItem('bar_user_role');
-    localStorage.removeItem('google_auth_action');
-    localStorage.removeItem('google_auth_timestamp');
-    sessionStorage.removeItem('redirect_processed_login');
-    sessionStorage.removeItem('redirect_processed_register');
-    
-    // 清除 URL 參數
-    const cleanUrl = new URL(window.location.href);
-    cleanUrl.searchParams.delete('google_auth');
-    cleanUrl.searchParams.delete('auth_time');
-    window.history.replaceState({}, '', cleanUrl.toString());
-    
     setShopId('');
     setIngredients([]);
     setRecipes([]);
