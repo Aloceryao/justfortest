@@ -419,7 +419,7 @@ const safeString = (str) => (str || '').toString();
 // ==========================================
 // ★ 版本號設定 (修改這裡會同步更新登入頁與設定頁)
 // ==========================================
-const APP_VERSION = 'v16.5 (完整修復版)';
+const APP_VERSION = 'v16.6 (完整修復版)';
 const safeNumber = (num) => {
   const n = parseFloat(num);
   return isNaN(n) ? 0 : n;
@@ -5051,13 +5051,10 @@ const LoginScreen = ({ onLogin }) => {
 
   // ========== 店長 Google 登入 ==========
   const handleGoogleLogin = async () => {
-    // 立即顯示 alert 確認函數被執行
-    alert('🔔 handleGoogleLogin 函數被執行了！請查看 Console');
-    
     console.log('═══════════════════════════════════════');
-    console.log('[Google Login] ⭐⭐⭐ 按鈕被點擊了！ ⭐⭐⭐');
-    console.log('[Google Login] 開始 Google 登入');
+    console.log('[Google Login] ⭐⭐⭐ 函數開始執行！ ⭐⭐⭐');
     console.log('[Google Login] 時間:', new Date().toLocaleTimeString());
+    console.log('[Google Login] 這是第一行，如果看到這行表示函數有被呼叫');
     
     // 先顯示一個 alert 確認按鈕有被觸發
     console.log('[Google Login] 🔔 設定錯誤訊息測試...');
@@ -5498,7 +5495,10 @@ const LoginScreen = ({ onLogin }) => {
             </div>
 
             <button
-              onClick={() => {
+              type="button"
+              onClick={(e) => {
+                e.preventDefault();
+                e.stopPropagation();
                 console.log('🔴🔴🔴 按鈕被點擊！開始執行 handleGoogleLogin 🔴🔴🔴');
                 handleGoogleLogin();
               }}
