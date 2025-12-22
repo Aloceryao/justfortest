@@ -419,7 +419,7 @@ const safeString = (str) => (str || '').toString();
 // ==========================================
 // ★ 版本號設定 (修改這裡會同步更新登入頁與設定頁)
 // ==========================================
-const APP_VERSION = 'v16.9 (登入測試完整版)';
+const APP_VERSION = 'v16.10 (登入測試完整版)';
 const safeNumber = (num) => {
   const n = parseFloat(num);
   return isNaN(n) ? 0 : n;
@@ -4982,45 +4982,96 @@ const LoginScreen = ({ onLogin }) => {
 
   // ========== 店長 Google 登入 ==========
   const handleGoogleLogin = async () => {
-    setLoading(true);
+    // 清除舊的 debug log
+    localStorage.removeItem('google_login_debug');
+    
+    // 記錄到 localStorage，即使頁面重新載入也能看到
+    const log = (msg) => {
+      console.log(msg);
+      const logs = JSON.parse(localStorage.getItem('google_login_debug') || '[]');
+      logs.push(`${new Date().toLocaleTimeString()} - ${msg}`);
+      localStorage.setItem('google_login_debug', JSON.stringify(logs.slice(-20))); // 保留最近 20 條
+    };
+    
+    log('═══════════════════════════════════════');
+    log('[Google Login] ⭐⭐⭐ 函數開始執行！ ⭐⭐⭐');
+    log('[Google Login] 時間: ' + new Date().toLocaleTimeString());
+    log('[Google Login] 這是第一行，如果看到這行表示函數有被呼叫');
+    
     setError('');
+    setLoading(true);
     
     try {
+      log('[Google Login] 檢查 Firebase...');
       if (!window.firebase) {
+        log('[Google Login] ❌ Firebase 未載入！');
         setError('系統初始化失敗，請重新整理頁面');
         setLoading(false);
         return;
       }
+      log('[Google Login] Firebase 已載入 ✓');
+      log('[Google Login] Firebase 版本: ' + window.firebase.SDK_VERSION);
       
       const auth = window.firebase.auth();
+      log('[Google Login] Auth 物件已取得');
+      log('[Google Login] Auth 是否已初始化: ' + !!auth);
+      log('[Google Login] Firebase Auth 當前用戶: ' + (auth.currentUser ? auth.currentUser.email : 'null'));
       
       // 檢查是否已經有用戶登入
       if (auth.currentUser) {
+        log('[Google Login] ⚠️ 偵測到已登入的用戶，先登出...');
         await auth.signOut();
+        log('[Google Login] ✓ 已登出舊用戶');
       }
       
       const provider = new window.firebase.auth.GoogleAuthProvider();
+      log('[Google Login] Provider 已建立 ✓');
       
       // 使用 Popup 模式（適合桌面和手機）
-      const result = await auth.signInWithPopup(provider);
+      log('[Google Login] 🚀 使用 signInWithPopup...');
+      log('[Google Login] ⏳ 即將開啟 Google 登入彈窗');
+      log('═══════════════════════════════════════');
       
-      // 處理登入
-      const userId = result.user.uid;
-      const db = window.firebase.firestore();
-      const userDoc = await db.collection('users').doc(userId).get();
-      
-      if (!userDoc.exists || !userDoc.data().shopId) {
-        await auth.signOut();
-        setError('此 Google 帳號尚未註冊。請點擊下方「註冊新商店」進行註冊');
-        setLoading(false);
-        return;
+      try {
+        log('[Google Login] 呼叫 signInWithPopup...');
+        const result = await auth.signInWithPopup(provider);
+        log('[Google Login] ✓ signInWithPopup 成功！');
+        log('[Google Login] User: ' + result.user.email);
+        
+        // 手動處理登入
+        const userId = result.user.uid;
+        const db = window.firebase.firestore();
+        const userDoc = await db.collection('users').doc(userId).get();
+        
+        if (!userDoc.exists || !userDoc.data().shopId) {
+          log('[Google Login] ✗ 用戶未註冊');
+          await auth.signOut();
+          setError('此 Google 帳號尚未註冊。請點擊下方「註冊新商店」進行註冊');
+          setLoading(false);
+          return;
+        }
+        
+        const userShopId = userDoc.data().shopId;
+        log('[Google Login] ✓ Shop ID: ' + userShopId);
+        log('[Google Login] 呼叫 onLogin...');
+        onLogin(userShopId, 'owner');
+        log('[Google Login] ✓✓✓ 登入成功！');
+        
+      } catch (popupError) {
+        log('[Google Login] ❌ signInWithPopup 發生錯誤！');
+        log('[Google Login] 錯誤: ' + popupError.message);
+        log('[Google Login] 錯誤代碼: ' + popupError.code);
+        throw popupError;
       }
       
-      const userShopId = userDoc.data().shopId;
-      onLogin(userShopId, 'owner');
-      
     } catch (e) {
-      console.error('Google 登入錯誤:', e);
+      log('═══════════════════════════════════════');
+      log('[Google Login] ❌ 發生錯誤！');
+      log('[Google Login] 錯誤訊息: ' + e.message);
+      log('[Google Login] 錯誤代碼: ' + e.code);
+      log('[Google Login] 錯誤 stack: ' + (e.stack || 'N/A'));
+      log('═══════════════════════════════════════');
+      console.error('[Google Login] 完整錯誤物件:', e);
       setError('Google 登入失敗：' + e.message);
       setLoading(false);
     }
@@ -5380,7 +5431,12 @@ const LoginScreen = ({ onLogin }) => {
 
             <button
               type="button"
-              onClick={handleGoogleLogin}
+              onClick={(e) => {
+                e.preventDefault();
+                e.stopPropagation();
+                console.log('🔴🔴🔴 按鈕被點擊！開始執行 handleGoogleLogin 🔴🔴🔴');
+                handleGoogleLogin();
+              }}
               disabled={loading}
               className="w-full py-4 bg-white text-slate-900 font-bold rounded-xl shadow-lg hover:bg-slate-100 transition-all active:scale-95 disabled:opacity-50 disabled:cursor-not-allowed flex items-center justify-center gap-3"
             >
@@ -6102,11 +6158,29 @@ const handleUpdateGridCategory = (updatedCat) => {
   });
 
   useEffect(() => {
+    console.log('[App Init] ========== MainAppContent 初始化 ==========');
+    
+    // 顯示之前的 Google 登入 debug log
+    const debugLogs = localStorage.getItem('google_login_debug');
+    if (debugLogs) {
+      console.log('🔍🔍🔍 上次 Google 登入的 Debug Log: 🔍🔍🔍');
+      try {
+        const logs = JSON.parse(debugLogs);
+        logs.forEach(log => console.log(log));
+      } catch (e) {
+        console.log('無法解析 debug log');
+      }
+      console.log('🔍🔍🔍 Debug Log 結束 🔍🔍🔍');
+    }
+    
     const params = new URLSearchParams(window.location.search);
     const urlShop = params.get('shop');
     const urlMode = params.get('mode');
+    console.log('[App Init] URL shop:', urlShop);
+    console.log('[App Init] URL mode:', urlMode);
 
     if (urlShop && urlMode === 'customer') {
+      console.log('[App Init] 從 URL 登入為 customer');
       setShopId(urlShop);
       setUserRole('customer');
       setIsLoggedIn(true);
@@ -6120,26 +6194,35 @@ const handleUpdateGridCategory = (updatedCat) => {
     script.async = true;
     document.body.appendChild(script);
 
+    console.log('[App Init] 載入 Firebase...');
     loadFirebase()
       .then(() => {
+        console.log('[App Init] Firebase 載入完成');
         setFirebaseReady(true);
       })
-      .catch((err) => console.error('Firebase 載入錯誤:', err));
+      .catch((err) => console.error('[App Init] Firebase 錯誤', err));
 
     const savedShop = localStorage.getItem('bar_shop_id');
     const savedRole = localStorage.getItem('bar_user_role');
+    console.log('[App Init] localStorage shop:', savedShop);
+    console.log('[App Init] localStorage role:', savedRole);
 
     // 檢查並清理不一致的 localStorage 狀態
     if (savedShop && !savedRole) {
+      console.log('[App Init] 檢測到不一致的 localStorage（有 shop 無 role），清除 shop');
       localStorage.removeItem('bar_shop_id');
     } else if (!savedShop && savedRole) {
+      console.log('[App Init] 檢測到不一致的 localStorage（有 role 無 shop），清除 role');
       localStorage.removeItem('bar_user_role');
     }
 
     if (savedShop && savedRole && !urlShop) {
+      console.log('[App Init] 從 localStorage 恢復登入狀態');
       setShopId(savedShop);
       setUserRole(savedRole);
       setIsLoggedIn(true);
+    } else {
+      console.log('[App Init] 沒有已儲存的登入資訊，保持登出狀態');
     }
 
     window.addEventListener('online', () => setIsOnline(true));
@@ -6276,15 +6359,30 @@ const handleUpdateGridCategory = (updatedCat) => {
   }, [shopId, isLoggedIn, firebaseReady]);
 
   const handleLogin = (sid, role) => {
+    console.log('[handleLogin] ========== 開始 ==========');
+    console.log('[handleLogin] Shop ID:', sid);
+    console.log('[handleLogin] Role:', role);
+    console.log('[handleLogin] 當前 isLoggedIn 狀態:', isLoggedIn);
+    
+    console.log('[handleLogin] 設定 shopId...');
     setShopId(sid);
+    console.log('[handleLogin] 設定 userRole...');
     setUserRole(role);
+    console.log('[handleLogin] 設定 isLoggedIn = true...');
     setIsLoggedIn(true);
+    console.log('[handleLogin] 寫入 localStorage...');
     localStorage.setItem('bar_shop_id', sid);
     localStorage.setItem('bar_user_role', role);
+    console.log('[handleLogin] localStorage 寫入完成');
+    console.log('[handleLogin] 設定 activeTab...');
     setActiveTab('recipes');
+    
+    console.log('[handleLogin] ========== 完成 ==========');
+    console.log('[handleLogin] 下一次渲染應該會進入主畫面');
   };
 
   const handleLogout = () => {
+    console.log('[handleLogout] 開始登出');
     setIsLoggedIn(false);
     localStorage.removeItem('bar_user_role');
     localStorage.removeItem('bar_shop_id');
@@ -6293,6 +6391,7 @@ const handleUpdateGridCategory = (updatedCat) => {
     setRecipes([]);
     setFoodItems([]);
     setStaffList([]);
+    console.log('[handleLogout] localStorage 已清除');
     if (window.history.pushState) {
       const newurl =
         window.location.protocol +
@@ -6301,6 +6400,7 @@ const handleUpdateGridCategory = (updatedCat) => {
         window.location.pathname;
       window.history.pushState({ path: newurl }, '', newurl);
     }
+    console.log('[handleLogout] 登出完成');
   };
 
   const closeDialog = () => setDialog({ ...dialog, isOpen: false });
@@ -6806,9 +6906,16 @@ const handleUpdateGridCategory = (updatedCat) => {
     setEditorMode(null);
   };
 
+  console.log('[App Render] isLoggedIn:', isLoggedIn);
+  console.log('[App Render] shopId:', shopId);
+  console.log('[App Render] userRole:', userRole);
+  
   if (!isLoggedIn) {
+    console.log('[App Render] 渲染 LoginScreen');
     return <LoginScreen onLogin={handleLogin} />;
   }
+  
+  console.log('[App Render] 渲染主畫面');
 
   const isOwner = userRole === 'owner';
   const isManager = userRole === 'manager';
