@@ -65,6 +65,7 @@ import {
   QrCode,
   HelpCircle,
   Play,
+  Store,
 } from 'lucide-react';
 
 // ==========================================
@@ -418,7 +419,7 @@ const safeString = (str) => (str || '').toString();
 // ==========================================
 // ★ 版本號設定 (修改這裡會同步更新登入頁與設定頁)
 // ==========================================
-const APP_VERSION = 'v16.5 (完整修復版)';
+const APP_VERSION = 'v16.6';
 const safeNumber = (num) => {
   const n = parseFloat(num);
   return isNaN(n) ? 0 : n;
@@ -5379,14 +5380,14 @@ const LoginScreen = ({ onLogin }) => {
                 value={shopId}
                 onChange={(e) => setShopId(e.target.value.toLowerCase().replace(/\s/g, '_'))}
                 className="w-full bg-slate-900 border border-slate-700 rounded-xl p-4 text-white outline-none focus:border-amber-500 font-mono"
-                placeholder="商店代碼（例如：my_bar）"
+                placeholder="商店代碼（英文小寫，例如：my_bar）"
               />
               <input
                 type="text"
                 value={shopName}
                 onChange={(e) => setShopName(e.target.value)}
                 className="w-full bg-slate-900 border border-slate-700 rounded-xl p-4 text-white outline-none focus:border-amber-500"
-                placeholder="商店名稱（選填）"
+                placeholder="商店名稱（可中文，例如：月光酒吧）"
               />
             </div>
 
@@ -5498,7 +5499,7 @@ const LoginScreen = ({ onLogin }) => {
                 value={shopId}
                 onChange={(e) => setShopId(e.target.value.toLowerCase().replace(/\s/g, '_'))}
                 className="w-full bg-slate-900 border border-slate-700 rounded-xl p-4 text-white outline-none focus:border-amber-500 font-mono"
-                placeholder="商店代碼（例如：my_bar）"
+                placeholder="商店代碼（英文小寫，例如：my_bar）"
                 autoFocus
               />
               <input
@@ -5506,7 +5507,7 @@ const LoginScreen = ({ onLogin }) => {
                 value={shopName}
                 onChange={(e) => setShopName(e.target.value)}
                 className="w-full bg-slate-900 border border-slate-700 rounded-xl p-4 text-white outline-none focus:border-amber-500"
-                placeholder="商店名稱（選填）"
+                placeholder="商店名稱（可中文，例如：月光酒吧）"
               />
             </div>
 
@@ -5740,6 +5741,11 @@ function MainAppContent() {
   const [isLoggedIn, setIsLoggedIn] = useState(false);
   const [shopId, setShopId] = useState('');
   const [userRole, setUserRole] = useState('customer');
+  
+  // 商店名稱管理
+  const [currentShopName, setCurrentShopName] = useState('');
+  const [isEditingShopName, setIsEditingShopName] = useState(false);
+  const [newShopNameInput, setNewShopNameInput] = useState('');
 
   const [ingredients, setIngredients] = useState([]);
   const [recipes, setRecipes] = useState([]);
@@ -6139,6 +6145,15 @@ const handleUpdateGridCategory = (updatedCat) => {
           if (doc.exists) {
             const data = doc.data();
             if (data.staffList) setStaffList(data.staffList);
+            // 載入商店名稱
+            if (data.shopName) {
+              setCurrentShopName(data.shopName);
+              setNewShopNameInput(data.shopName);
+            } else {
+              // 如果沒有設定商店名稱，使用 shopId
+              setCurrentShopName(shopId);
+              setNewShopNameInput(shopId);
+            }
           }
         });
       return () => {
@@ -6278,6 +6293,33 @@ const handleUpdateGridCategory = (updatedCat) => {
         .collection('settings')
         .doc('config')
         .set({ staffList: updatedList }, { merge: true });
+    }
+  };
+
+  // ========== 更新商店名稱 ==========
+  const handleUpdateShopName = async () => {
+    if (!newShopNameInput.trim()) {
+      return showAlert('錯誤', '請輸入商店名稱');
+    }
+
+    try {
+      setCurrentShopName(newShopNameInput.trim());
+      
+      if (window.firebase && shopId) {
+        await window.firebase
+          .firestore()
+          .collection('shops')
+          .doc(shopId)
+          .collection('settings')
+          .doc('config')
+          .set({ shopName: newShopNameInput.trim() }, { merge: true });
+      }
+      
+      setIsEditingShopName(false);
+      showAlert('成功', '商店名稱已更新');
+    } catch (error) {
+      console.error('Update shop name error:', error);
+      showAlert('錯誤', '更新失敗：' + error.message);
     }
   };
 
@@ -6777,6 +6819,79 @@ const handleUpdateGridCategory = (updatedCat) => {
                   : '員工'}
               </p>
             </div>
+
+            {isOwner && (
+              <div className="bg-slate-900 p-4 rounded-xl space-y-4 border border-slate-800">
+                <h3 className="text-sm font-bold text-white flex gap-2 items-center">
+                  <Store size={16} className="text-amber-500" /> 商店資訊
+                </h3>
+                
+                <div className="space-y-3">
+                  {/* 商店代碼（不可修改） */}
+                  <div>
+                    <label className="text-xs text-slate-500 mb-1 block">
+                      商店代碼（不可修改）
+                    </label>
+                    <div className="bg-slate-800 border border-slate-700 rounded-lg p-3 text-slate-400 font-mono text-sm">
+                      {shopId}
+                    </div>
+                  </div>
+
+                  {/* 商店名稱（可修改） */}
+                  <div>
+                    <label className="text-xs text-slate-500 mb-1 block flex justify-between items-center">
+                      <span>商店名稱（顯示用）</span>
+                      {!isEditingShopName && (
+                        <button
+                          onClick={() => setIsEditingShopName(true)}
+                          className="text-amber-500 text-xs hover:text-amber-400 flex items-center gap-1"
+                        >
+                          <Edit3 size={12} /> 修改
+                        </button>
+                      )}
+                    </label>
+                    
+                    {isEditingShopName ? (
+                      <div className="space-y-2">
+                        <input
+                          value={newShopNameInput}
+                          onChange={(e) => setNewShopNameInput(e.target.value)}
+                          placeholder="例如：Intox 調酒吧"
+                          className="w-full bg-slate-800 border border-amber-500/50 rounded-lg p-3 text-white outline-none focus:border-amber-500"
+                          autoFocus
+                        />
+                        <div className="flex gap-2">
+                          <button
+                            onClick={() => {
+                              setIsEditingShopName(false);
+                              setNewShopNameInput(currentShopName);
+                            }}
+                            className="flex-1 py-2 bg-slate-800 text-slate-400 rounded-lg text-sm hover:bg-slate-700"
+                          >
+                            取消
+                          </button>
+                          <button
+                            onClick={handleUpdateShopName}
+                            className="flex-1 py-2 bg-amber-600 text-white rounded-lg text-sm font-bold hover:bg-amber-500"
+                          >
+                            儲存
+                          </button>
+                        </div>
+                      </div>
+                    ) : (
+                      <div className="bg-slate-800 border border-slate-700 rounded-lg p-3 text-white">
+                        {currentShopName || shopId}
+                      </div>
+                    )}
+                  </div>
+                </div>
+
+                <div className="text-xs text-slate-500 bg-slate-800/50 p-2 rounded border border-slate-800">
+                  <Info size={12} className="inline mr-1" />
+                  商店名稱會顯示在 App 各處，可隨時修改。商店代碼用於系統識別，設定後無法更改。
+                </div>
+              </div>
+            )}
 
             <div className="bg-slate-900 p-4 rounded-xl border border-slate-800">
               <button
