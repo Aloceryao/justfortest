@@ -82,24 +82,32 @@ const FIREBASE_CONFIG = {
 
 const loadFirebase = () => {
   return new Promise((resolve, reject) => {
-    if (window.firebase && window.firebase.firestore)
+    if (window.firebase && window.firebase.firestore && window.firebase.auth)
       return resolve(window.firebase);
+    
     const script = document.createElement('script');
-    script.src =
-      'https://www.gstatic.com/firebasejs/9.22.0/firebase-app-compat.js';
+    script.src = 'https://www.gstatic.com/firebasejs/9.22.0/firebase-app-compat.js';
+    
     script.onload = () => {
       const script2 = document.createElement('script');
-      script2.src =
-        'https://www.gstatic.com/firebasejs/9.22.0/firebase-firestore-compat.js';
+      script2.src = 'https://www.gstatic.com/firebasejs/9.22.0/firebase-firestore-compat.js';
+      
       script2.onload = () => {
-        try {
-          if (!window.firebase.apps.length) {
-            window.firebase.initializeApp(FIREBASE_CONFIG);
+        const script3 = document.createElement('script');
+        script3.src = 'https://www.gstatic.com/firebasejs/9.22.0/firebase-auth-compat.js';
+        
+        script3.onload = () => {
+          try {
+            if (!window.firebase.apps.length) {
+              window.firebase.initializeApp(FIREBASE_CONFIG);
+            }
+            resolve(window.firebase);
+          } catch (e) {
+            reject(e);
           }
-          resolve(window.firebase);
-        } catch (e) {
-          reject(e);
-        }
+        };
+        script3.onerror = reject;
+        document.body.appendChild(script3);
       };
       script2.onerror = reject;
       document.body.appendChild(script2);
@@ -410,7 +418,7 @@ const safeString = (str) => (str || '').toString();
 // ==========================================
 // ★ 版本號設定 (修改這裡會同步更新登入頁與設定頁)
 // ==========================================
-const APP_VERSION = 'v16.0 (完整修復版01)';
+const APP_VERSION = 'v16.1 (完整修復版)';
 const safeNumber = (num) => {
   const n = parseFloat(num);
   return isNaN(n) ? 0 : n;
@@ -622,25 +630,63 @@ const LoginHelpModal = ({ isOpen, onClose }) => {
   if (!isOpen) return null;
   return (
     <div className="fixed inset-0 z-[110] flex items-center justify-center p-6 bg-black/80 backdrop-blur-sm animate-fade-in">
-      <div className="bg-slate-900 border border-slate-700 w-full max-w-sm rounded-2xl shadow-2xl p-6 animate-scale-in">
+      <div className="bg-slate-900 border border-slate-700 w-full max-w-md rounded-2xl shadow-2xl p-6 animate-scale-in max-h-[90vh] overflow-y-auto custom-scrollbar">
         <h3 className="text-xl font-bold text-white mb-4 text-center">如何開始使用？</h3>
         <div className="space-y-4 text-sm text-slate-300">
-          <div className="p-3 bg-slate-800 rounded-xl border border-slate-700">
-            <strong className="text-amber-500 block mb-1">1. Shop ID 是什麼？</strong>
-            <p>就像您的 IG 帳號。請自創一個代碼（例如：my_bar_01）。</p>
-            <p className="mt-1 text-slate-400 text-xs">未來在別台手機輸入同一個 ID，就能看到一樣的資料。</p>
+          
+          {/* 店長部分 */}
+          <div className="p-4 bg-gradient-to-br from-amber-900/30 to-orange-900/30 rounded-xl border border-amber-500/30">
+            <div className="flex items-center gap-2 mb-3">
+              <KeyRound size={20} className="text-amber-500" />
+              <strong className="text-amber-500 text-base">店長登入方式</strong>
+            </div>
+            <div className="space-y-2 text-xs">
+              <p><strong>1. 首次使用</strong>：點選「註冊新商店」</p>
+              <p className="pl-3">• 輸入您的 Email 和密碼</p>
+              <p className="pl-3">• 設定商店代碼（例如：my_bar_2024）</p>
+              <p className="pl-3">• 完成註冊後即可開始使用</p>
+              
+              <p className="mt-2"><strong>2. 已註冊</strong>：使用 Email 或 Google 帳號登入</p>
+              <p className="pl-3">• Email + 密碼登入</p>
+              <p className="pl-3">• 或直接使用 Google 一鍵登入</p>
+              
+              <p className="mt-2"><strong>3. 多裝置同步</strong></p>
+              <p className="pl-3">使用同一個 Email 登入，所有資料自動同步！</p>
+            </div>
           </div>
-          <div className="p-3 bg-slate-800 rounded-xl border border-slate-700">
-            <strong className="text-amber-500 block mb-1">2. 需要註冊嗎？</strong>
-            <p>不需要！直接輸入您想用的 Shop ID，並選擇「店長」身分，系統會自動為您建立新資料庫。</p>
+
+          {/* 店員部分 */}
+          <div className="p-4 bg-gradient-to-br from-blue-900/30 to-indigo-900/30 rounded-xl border border-blue-500/30">
+            <div className="flex items-center gap-2 mb-3">
+              <Users size={20} className="text-blue-500" />
+              <strong className="text-blue-500 text-base">店員登入方式</strong>
+            </div>
+            <div className="space-y-2 text-xs">
+              <p><strong>1. 輸入商店代碼</strong>（請向店長索取）</p>
+              <p><strong>2. 選擇您的名字</strong></p>
+              <p><strong>3. 輸入密碼</strong>（由店長設定）</p>
+              <p className="mt-2 text-blue-200">超簡單！不需要 Email，只要密碼就能快速登入。</p>
+            </div>
           </div>
+
+          {/* Shop ID 說明 */}
           <div className="p-3 bg-slate-800 rounded-xl border border-slate-700">
-            <strong className="text-amber-500 block mb-1">3. 關於密碼</strong>
-            <p>第一次登入時輸入的密碼，就會直接設定成未來的「管理員密碼」。請務必記住喔！</p>
+            <strong className="text-slate-400 block mb-1">什麼是商店代碼（Shop ID）？</strong>
+            <p className="text-xs">就像您的 IG 帳號，是商店的唯一識別碼。店員和顧客需要這個代碼才能存取您的酒單。</p>
+          </div>
+
+          {/* 安全提示 */}
+          <div className="p-3 bg-emerald-900/20 border border-emerald-500/30 rounded-xl">
+            <div className="flex items-center gap-2 mb-1">
+              <Lock size={16} className="text-emerald-500" />
+              <strong className="text-emerald-500 text-xs">安全性提升</strong>
+            </div>
+            <p className="text-xs text-emerald-200">使用 Firebase Authentication，您的帳號更安全，且支援「忘記密碼」功能！</p>
           </div>
         </div>
+        
         <button onClick={onClose} className="w-full mt-6 py-3 bg-amber-600 hover:bg-amber-500 text-white rounded-xl font-bold transition-colors">
-          我瞭解了，開始輸入
+          我瞭解了！開始使用
         </button>
       </div>
     </div>
@@ -4771,21 +4817,32 @@ const ViewerOverlay = ({
   );
 };
 // ==========================================
-// 5. Login Screen (修正：括號與權限顯示)
+// 5. Login Screen (完整改造版 - Email + 社群登入)
 // ==========================================
 
 const LoginScreen = ({ onLogin }) => {
-  const [shopId, setShopId] = useState('');
-  const [role, setRole] = useState(null); 
+  // 登入模式: 'select' | 'owner-login' | 'owner-register' | 'staff-login'
+  const [mode, setMode] = useState('select');
+  
+  // 店長登入/註冊
+  const [email, setEmail] = useState('');
   const [password, setPassword] = useState('');
+  const [shopId, setShopId] = useState('');
+  const [shopName, setShopName] = useState('');
+  
+  // 店員登入
   const [staffList, setStaffList] = useState([]);
   const [selectedStaffId, setSelectedStaffId] = useState('');
+  const [staffPassword, setStaffPassword] = useState('');
   const [loadingStaff, setLoadingStaff] = useState(false);
+  
   const [error, setError] = useState('');
-  const [showHelp, setShowHelp] = useState(false); // 新增
+  const [loading, setLoading] = useState(false);
+  const [showHelp, setShowHelp] = useState(false);
 
+  // 店員模式：自動載入店員名單
   useEffect(() => {
-    if (role === 'staff' && shopId.length >= 3 && window.firebase) {
+    if (mode === 'staff-login' && shopId.length >= 3 && window.firebase) {
       const fetchStaff = async () => {
         setLoadingStaff(true);
         try {
@@ -4810,215 +4867,482 @@ const LoginScreen = ({ onLogin }) => {
       const timer = setTimeout(fetchStaff, 1000);
       return () => clearTimeout(timer);
     }
-  }, [shopId, role]);
+  }, [shopId, mode]);
 
-  const handleLogin = async () => {
-    if (!shopId) return setError('請輸入商店代碼');
-    if (!role) return setError('請選擇身分');
-
-    const db =
-      window.firebase && window.firebase.firestore
-        ? window.firebase.firestore()
-        : null;
-
-    if (role === 'owner') {
-      const localPwd = localStorage.getItem('bar_admin_password');
-      if (localPwd && password === localPwd) {
-        // 註解：本地密碼驗證通過，跳過 DB 檢查，直接往下執行登入
-      } else if (db) {
-        try {
-          const settingsDoc = await db
-            .collection('shops')
-            .doc(shopId)
-            .collection('settings')
-            .doc('config')
-            .get();
-          if (settingsDoc.exists) {
-            const cloudPwd = settingsDoc.data().adminPassword;
-            if (cloudPwd && cloudPwd !== password)
-              return setError('管理員密碼錯誤');
-            if (!cloudPwd)
-              await db
-                .collection('shops')
-                .doc(shopId)
-                .collection('settings')
-                .doc('config')
-                .set({ adminPassword: password }, { merge: true });
-            localStorage.setItem('bar_admin_password', password);
-          } else {
-            await db
-              .collection('shops')
-              .doc(shopId)
-              .collection('settings')
-              .doc('config')
-              .set({ adminPassword: password });
-            localStorage.setItem('bar_admin_password', password);
-          }
-        } catch (e) {
-          console.error(e);
-        }
+  // ========== 店長 Email 登入 ==========
+  const handleOwnerLogin = async () => {
+    if (!email || !password) return setError('請輸入 Email 和密碼');
+    
+    setLoading(true);
+    setError('');
+    
+    try {
+      const auth = window.firebase.auth();
+      const result = await auth.signInWithEmailAndPassword(email, password);
+      const userId = result.user.uid;
+      
+      // 從 Firestore 取得該 Email 對應的 shopId
+      const db = window.firebase.firestore();
+      const userDoc = await db.collection('users').doc(userId).get();
+      
+      if (!userDoc.exists || !userDoc.data().shopId) {
+        await auth.signOut();
+        return setError('此帳號尚未綁定商店');
       }
-    }
-
-    let finalRole = role;
-    if (role === 'staff') {
-      if (staffList.length > 0) {
-        if (!selectedStaffId) return setError('請選擇您的名字');
-        const staff = staffList.find((s) => s.id === selectedStaffId);
-        if (staff && staff.password !== password)
-          return setError('員工密碼錯誤');
-
-        if (staff && staff.role === 'manager') {
-          finalRole = 'manager';
-        }
+      
+      const userShopId = userDoc.data().shopId;
+      onLogin(userShopId, 'owner');
+      
+    } catch (e) {
+      console.error('Login error:', e);
+      if (e.code === 'auth/user-not-found') {
+        setError('此 Email 尚未註冊');
+      } else if (e.code === 'auth/wrong-password') {
+        setError('密碼錯誤');
+      } else if (e.code === 'auth/invalid-email') {
+        setError('Email 格式不正確');
+      } else {
+        setError('登入失敗：' + e.message);
       }
+    } finally {
+      setLoading(false);
     }
-
-    onLogin(shopId, finalRole);
   };
 
+  // ========== 店長 Google 登入 ==========
+  const handleGoogleLogin = async () => {
+    setLoading(true);
+    setError('');
+    
+    try {
+      const auth = window.firebase.auth();
+      const provider = new window.firebase.auth.GoogleAuthProvider();
+      const result = await auth.signInWithPopup(provider);
+      const userId = result.user.uid;
+      
+      // 檢查是否已綁定商店
+      const db = window.firebase.firestore();
+      const userDoc = await db.collection('users').doc(userId).get();
+      
+      if (!userDoc.exists || !userDoc.data().shopId) {
+        // 首次使用 Google 登入，需要建立商店
+        await auth.signOut();
+        setError('請先用 Email 註冊商店，或聯絡管理員');
+        return;
+      }
+      
+      const userShopId = userDoc.data().shopId;
+      onLogin(userShopId, 'owner');
+      
+    } catch (e) {
+      console.error('Google login error:', e);
+      if (e.code === 'auth/popup-closed-by-user') {
+        setError('已取消登入');
+      } else {
+        setError('Google 登入失敗：' + e.message);
+      }
+    } finally {
+      setLoading(false);
+    }
+  };
+
+  // ========== 店長註冊新商店 ==========
+  const handleOwnerRegister = async () => {
+    if (!email || !password) return setError('請輸入 Email 和密碼');
+    if (!shopId) return setError('請輸入商店代碼');
+    if (password.length < 6) return setError('密碼至少需要 6 個字元');
+    
+    setLoading(true);
+    setError('');
+    
+    try {
+      const auth = window.firebase.auth();
+      const db = window.firebase.firestore();
+      
+      // 檢查 shopId 是否已被使用
+      const shopDoc = await db.collection('shops').doc(shopId).get();
+      if (shopDoc.exists) {
+        return setError('此商店代碼已被使用，請換一個');
+      }
+      
+      // 建立 Firebase Auth 帳號
+      const result = await auth.createUserWithEmailAndPassword(email, password);
+      const userId = result.user.uid;
+      
+      // 建立 user 文件（記錄 email 對應的 shopId）
+      await db.collection('users').doc(userId).set({
+        email: email,
+        shopId: shopId,
+        shopName: shopName || shopId,
+        createdAt: new Date(),
+      });
+      
+      // 建立商店基本設定
+      await db.collection('shops').doc(shopId).collection('settings').doc('config').set({
+        shopName: shopName || shopId,
+        ownerId: userId,
+        ownerEmail: email,
+        createdAt: new Date(),
+        staffList: [],
+      });
+      
+      // 成功註冊，直接登入
+      onLogin(shopId, 'owner');
+      
+    } catch (e) {
+      console.error('Register error:', e);
+      if (e.code === 'auth/email-already-in-use') {
+        setError('此 Email 已被註冊');
+      } else if (e.code === 'auth/invalid-email') {
+        setError('Email 格式不正確');
+      } else if (e.code === 'auth/weak-password') {
+        setError('密碼強度不足（至少 6 個字元）');
+      } else {
+        setError('註冊失敗：' + e.message);
+      }
+    } finally {
+      setLoading(false);
+    }
+  };
+
+  // ========== 店員登入（保持原邏輯）==========
+  const handleStaffLogin = async () => {
+    if (!shopId) return setError('請輸入商店代碼');
+    
+    if (staffList.length > 0) {
+      if (!selectedStaffId) return setError('請選擇您的名字');
+      if (!staffPassword) return setError('請輸入密碼');
+      
+      const staff = staffList.find((s) => s.id === selectedStaffId);
+      if (!staff) return setError('找不到此員工');
+      if (staff.password !== staffPassword) return setError('員工密碼錯誤');
+      
+      const finalRole = staff.role === 'manager' ? 'manager' : 'staff';
+      onLogin(shopId, finalRole);
+    } else {
+      // 沒有員工名單，直接以 staff 身分登入
+      onLogin(shopId, 'staff');
+    }
+  };
+
+  // ========== UI 渲染 ==========
   return (
-    <div className="fixed inset-0 bg-slate-950 flex flex-col items-center justify-center p-6 z-[100]">
+    <div className="fixed inset-0 bg-slate-950 flex flex-col items-center justify-center p-6 z-[100] overflow-y-auto">
+      {/* Logo & Title */}
       <div className="w-20 h-20 bg-amber-600 rounded-full flex items-center justify-center shadow-lg shadow-amber-600/30 mb-6 animate-scale-in">
         <Wine size={40} className="text-white" />
       </div>
-      <h1 className="text-3xl font-serif text-white font-bold mb-2">
-        Bar Manager
-      </h1>
+      <h1 className="text-3xl font-serif text-white font-bold mb-2">Bar Manager</h1>
       <p className="text-slate-400 text-sm mb-8">雲端調酒管理系統 {APP_VERSION}</p>
 
+      {/* 幫助按鈕 */}
+      <button 
+        onClick={() => setShowHelp(true)}
+        className="mb-4 py-2 px-4 bg-amber-900/40 border border-amber-500 text-amber-400 rounded-xl text-sm font-bold hover:bg-amber-900/60 transition-all flex items-center gap-2"
+      >
+        <HelpCircle size={16} />
+        第一次使用？點此查看教學
+      </button>
+
       <div className="w-full max-w-sm space-y-4">
-        <div className="space-y-1">
-          <label className="text-xs text-slate-500 font-bold uppercase">
-            商店代碼 (Shop ID)
-          </label>
-          <div className="relative">
-            <input
-              value={shopId}
-              onChange={(e) => setShopId(e.target.value)}
-              className="w-full bg-slate-900 border border-slate-700 rounded-xl p-4 pl-12 text-white outline-none focus:border-amber-500 font-mono tracking-wide"
-              placeholder="例如: demo_bar"
-            />
-            <LayoutDashboard
-              className="absolute left-4 top-4 text-slate-500"
-              size={20}
-            />
-          </div>
-          {/* 修改：登入說明按鈕 (放大顯眼版) */}
-          <div className="mt-3 mb-2">
-             <button 
-                onClick={() => setShowHelp(true)}
-                className="w-full py-3 bg-amber-900/40 border border-amber-500 text-amber-400 rounded-xl text-base font-bold hover:bg-amber-900/60 transition-all flex items-center justify-center gap-2 shadow-lg shadow-amber-900/20"
-             >
-                <HelpCircle size={20} />
-                第一次使用？點此查看教學
-             </button>
-          </div>
-        </div>
+        {/* ========== 模式選擇 ========== */}
+        {mode === 'select' && (
+          <div className="space-y-4 animate-fade-in">
+            <h2 className="text-center text-white font-bold text-lg">請選擇登入方式</h2>
+            
+            <button
+              onClick={() => setMode('owner-login')}
+              className="w-full p-6 bg-gradient-to-br from-amber-600 to-orange-700 rounded-2xl border border-amber-500 text-white hover:opacity-90 transition-all active:scale-95 flex items-center justify-between shadow-xl"
+            >
+              <div className="flex items-center gap-4">
+                <KeyRound size={32} />
+                <div className="text-left">
+                  <div className="font-bold text-lg">店長登入</div>
+                  <div className="text-xs text-amber-100">使用 Email 或 Google 帳號</div>
+                </div>
+              </div>
+              <ChevronLeft size={24} className="rotate-180" />
+            </button>
 
-        <div className="grid grid-cols-3 gap-2">
-          <button
-            onClick={() => setRole('owner')}
-            className={`p-4 rounded-xl border flex flex-col items-center gap-2 transition-all ${
-              role === 'owner'
-                ? 'bg-amber-600 border-amber-500 text-white'
-                : 'bg-slate-900 border-slate-800 text-slate-500'
-            }`}
-          >
-            <KeyRound size={24} />
-            <span className="text-xs font-bold">店長</span>
-          </button>
-          <button
-            onClick={() => {
-              setRole('staff');
-              setStaffList([]);
-              setError('');
-            }}
-            className={`p-4 rounded-xl border flex flex-col items-center gap-2 transition-all ${
-              role === 'staff'
-                ? 'bg-blue-600 border-blue-500 text-white'
-                : 'bg-slate-900 border-slate-800 text-slate-500'
-            }`}
-          >
-            <Users size={24} />
-            <span className="text-xs font-bold">員工</span>
-          </button>
-          <button
-            onClick={() => setRole('customer')}
-            className={`p-4 rounded-xl border flex flex-col items-center gap-2 transition-all ${
-              role === 'customer'
-                ? 'bg-emerald-600 border-emerald-500 text-white'
-                : 'bg-slate-900 border-slate-800 text-slate-500'
-            }`}
-          >
-            <Beer size={24} />
-            <span className="text-xs font-bold">顧客</span>
-          </button>
-        </div>
+            <button
+              onClick={() => setMode('staff-login')}
+              className="w-full p-6 bg-gradient-to-br from-blue-600 to-indigo-700 rounded-2xl border border-blue-500 text-white hover:opacity-90 transition-all active:scale-95 flex items-center justify-between shadow-xl"
+            >
+              <div className="flex items-center gap-4">
+                <Users size={32} />
+                <div className="text-left">
+                  <div className="font-bold text-lg">店員登入</div>
+                  <div className="text-xs text-blue-100">快速密碼登入</div>
+                </div>
+              </div>
+              <ChevronLeft size={24} className="rotate-180" />
+            </button>
 
-        {role === 'owner' && (
-          <div className="animate-fade-in">
-            <input
-              type="password"
-              value={password}
-              onChange={(e) => setPassword(e.target.value)}
-              className="w-full bg-slate-900 border border-slate-700 rounded-xl p-4 text-white outline-none focus:border-amber-500 text-center tracking-widest"
-              placeholder="請輸入管理密碼"
-            />
+            <div className="text-center mt-6">
+              <button
+                onClick={() => setMode('owner-register')}
+                className="text-amber-500 text-sm underline hover:text-amber-400"
+              >
+                還沒有帳號？點此註冊新商店
+              </button>
+            </div>
           </div>
         )}
 
-        {role === 'staff' && (
-          <div className="animate-fade-in space-y-3">
-            {loadingStaff ? (
-              <div className="text-center text-slate-500 text-xs">
-                檢查員工名單中...
+        {/* ========== 店長登入 ========== */}
+        {mode === 'owner-login' && (
+          <div className="space-y-4 animate-fade-in">
+            <button
+              onClick={() => setMode('select')}
+              className="flex items-center gap-2 text-slate-400 hover:text-white transition-colors"
+            >
+              <ChevronLeft size={20} />
+              返回
+            </button>
+
+            <h2 className="text-center text-white font-bold text-xl">店長登入</h2>
+
+            <div className="space-y-3">
+              <input
+                type="email"
+                value={email}
+                onChange={(e) => setEmail(e.target.value)}
+                onKeyDown={(e) => e.key === 'Enter' && handleOwnerLogin()}
+                className="w-full bg-slate-900 border border-slate-700 rounded-xl p-4 text-white outline-none focus:border-amber-500"
+                placeholder="Email"
+                autoComplete="email"
+              />
+              <input
+                type="password"
+                value={password}
+                onChange={(e) => setPassword(e.target.value)}
+                onKeyDown={(e) => e.key === 'Enter' && handleOwnerLogin()}
+                className="w-full bg-slate-900 border border-slate-700 rounded-xl p-4 text-white outline-none focus:border-amber-500"
+                placeholder="密碼"
+                autoComplete="current-password"
+              />
+            </div>
+
+            {error && <p className="text-rose-500 text-xs text-center">{error}</p>}
+
+            <button
+              onClick={handleOwnerLogin}
+              disabled={loading}
+              className="w-full py-4 bg-amber-600 text-white font-bold rounded-xl shadow-lg hover:bg-amber-500 transition-all active:scale-95 disabled:opacity-50 disabled:cursor-not-allowed flex items-center justify-center gap-2"
+            >
+              {loading ? (
+                <>
+                  <RefreshCcw size={20} className="animate-spin" />
+                  登入中...
+                </>
+              ) : (
+                <>
+                  <LogIn size={20} />
+                  Email 登入
+                </>
+              )}
+            </button>
+
+            <div className="relative my-6">
+              <div className="absolute inset-0 flex items-center">
+                <div className="w-full border-t border-slate-700"></div>
               </div>
-            ) : staffList.length > 0 ? (
-              <>
-                <div className="space-y-1">
-                  <label className="text-xs text-slate-500 font-bold uppercase">
-                    選擇名字
-                  </label>
+              <div className="relative flex justify-center text-sm">
+                <span className="px-4 bg-slate-950 text-slate-500">或使用社群帳號</span>
+              </div>
+            </div>
+
+            <button
+              onClick={handleGoogleLogin}
+              disabled={loading}
+              className="w-full py-4 bg-white text-slate-900 font-bold rounded-xl shadow-lg hover:bg-slate-100 transition-all active:scale-95 disabled:opacity-50 disabled:cursor-not-allowed flex items-center justify-center gap-3"
+            >
+              <svg width="20" height="20" viewBox="0 0 24 24">
+                <path fill="#4285F4" d="M22.56 12.25c0-.78-.07-1.53-.2-2.25H12v4.26h5.92c-.26 1.37-1.04 2.53-2.21 3.31v2.77h3.57c2.08-1.92 3.28-4.74 3.28-8.09z"/>
+                <path fill="#34A853" d="M12 23c2.97 0 5.46-.98 7.28-2.66l-3.57-2.77c-.98.66-2.23 1.06-3.71 1.06-2.86 0-5.29-1.93-6.16-4.53H2.18v2.84C3.99 20.53 7.7 23 12 23z"/>
+                <path fill="#FBBC05" d="M5.84 14.09c-.22-.66-.35-1.36-.35-2.09s.13-1.43.35-2.09V7.07H2.18C1.43 8.55 1 10.22 1 12s.43 3.45 1.18 4.93l2.85-2.22.81-.62z"/>
+                <path fill="#EA4335" d="M12 5.38c1.62 0 3.06.56 4.21 1.64l3.15-3.15C17.45 2.09 14.97 1 12 1 7.7 1 3.99 3.47 2.18 7.07l3.66 2.84c.87-2.6 3.3-4.53 6.16-4.53z"/>
+              </svg>
+              Google 登入
+            </button>
+
+            <div className="text-center mt-4">
+              <button
+                onClick={() => setMode('owner-register')}
+                className="text-slate-400 text-sm hover:text-white"
+              >
+                還沒有帳號？<span className="text-amber-500 underline">點此註冊</span>
+              </button>
+            </div>
+          </div>
+        )}
+
+        {/* ========== 店長註冊 ========== */}
+        {mode === 'owner-register' && (
+          <div className="space-y-4 animate-fade-in">
+            <button
+              onClick={() => setMode('select')}
+              className="flex items-center gap-2 text-slate-400 hover:text-white transition-colors"
+            >
+              <ChevronLeft size={20} />
+              返回
+            </button>
+
+            <h2 className="text-center text-white font-bold text-xl">註冊新商店</h2>
+
+            <div className="space-y-3">
+              <input
+                type="email"
+                value={email}
+                onChange={(e) => setEmail(e.target.value)}
+                className="w-full bg-slate-900 border border-slate-700 rounded-xl p-4 text-white outline-none focus:border-amber-500"
+                placeholder="您的 Email"
+                autoComplete="email"
+              />
+              <input
+                type="password"
+                value={password}
+                onChange={(e) => setPassword(e.target.value)}
+                className="w-full bg-slate-900 border border-slate-700 rounded-xl p-4 text-white outline-none focus:border-amber-500"
+                placeholder="設定密碼（至少 6 個字元）"
+                autoComplete="new-password"
+              />
+              <input
+                type="text"
+                value={shopId}
+                onChange={(e) => setShopId(e.target.value.toLowerCase().replace(/\s/g, '_'))}
+                className="w-full bg-slate-900 border border-slate-700 rounded-xl p-4 text-white outline-none focus:border-amber-500 font-mono"
+                placeholder="商店代碼（例如：my_bar_2024）"
+              />
+              <input
+                type="text"
+                value={shopName}
+                onChange={(e) => setShopName(e.target.value)}
+                className="w-full bg-slate-900 border border-slate-700 rounded-xl p-4 text-white outline-none focus:border-amber-500"
+                placeholder="商店名稱（選填）"
+              />
+            </div>
+
+            <div className="bg-blue-900/20 border border-blue-500/30 rounded-xl p-3 text-xs text-blue-200">
+              <Info size={16} className="inline mr-1" />
+              商店代碼設定後無法更改，員工和顧客需要此代碼才能存取。
+            </div>
+
+            {error && <p className="text-rose-500 text-xs text-center">{error}</p>}
+
+            <button
+              onClick={handleOwnerRegister}
+              disabled={loading}
+              className="w-full py-4 bg-gradient-to-r from-amber-600 to-orange-600 text-white font-bold rounded-xl shadow-lg hover:opacity-90 transition-all active:scale-95 disabled:opacity-50 disabled:cursor-not-allowed flex items-center justify-center gap-2"
+            >
+              {loading ? (
+                <>
+                  <RefreshCcw size={20} className="animate-spin" />
+                  註冊中...
+                </>
+              ) : (
+                <>
+                  <Star size={20} />
+                  建立我的商店
+                </>
+              )}
+            </button>
+
+            <div className="text-center mt-4">
+              <button
+                onClick={() => setMode('owner-login')}
+                className="text-slate-400 text-sm hover:text-white"
+              >
+                已有帳號？<span className="text-amber-500 underline">點此登入</span>
+              </button>
+            </div>
+          </div>
+        )}
+
+        {/* ========== 店員登入 ========== */}
+        {mode === 'staff-login' && (
+          <div className="space-y-4 animate-fade-in">
+            <button
+              onClick={() => setMode('select')}
+              className="flex items-center gap-2 text-slate-400 hover:text-white transition-colors"
+            >
+              <ChevronLeft size={20} />
+              返回
+            </button>
+
+            <h2 className="text-center text-white font-bold text-xl">店員登入</h2>
+
+            <div className="space-y-3">
+              <input
+                type="text"
+                value={shopId}
+                onChange={(e) => setShopId(e.target.value)}
+                className="w-full bg-slate-900 border border-slate-700 rounded-xl p-4 text-white outline-none focus:border-blue-500 font-mono"
+                placeholder="商店代碼"
+              />
+
+              {loadingStaff ? (
+                <div className="text-center text-slate-500 text-sm py-8">
+                  <RefreshCcw size={24} className="animate-spin mx-auto mb-2" />
+                  檢查員工名單中...
+                </div>
+              ) : shopId.length >= 3 && staffList.length > 0 ? (
+                <>
                   <select
                     value={selectedStaffId}
                     onChange={(e) => setSelectedStaffId(e.target.value)}
                     className="w-full bg-slate-900 border border-slate-700 rounded-xl p-4 text-white outline-none focus:border-blue-500 appearance-none"
                   >
-                    <option value="">-- 請選擇 --</option>
+                    <option value="">-- 選擇您的名字 --</option>
                     {staffList.map((s) => (
                       <option key={s.id} value={s.id}>
-                        {s.name}
+                        {s.name} {s.role === 'manager' && '(資深)'}
                       </option>
                     ))}
                   </select>
+                  <input
+                    type="password"
+                    value={staffPassword}
+                    onChange={(e) => setStaffPassword(e.target.value)}
+                    onKeyDown={(e) => e.key === 'Enter' && handleStaffLogin()}
+                    className="w-full bg-slate-900 border border-slate-700 rounded-xl p-4 text-white outline-none focus:border-blue-500 text-center tracking-widest"
+                    placeholder="輸入員工密碼"
+                  />
+                </>
+              ) : shopId.length >= 3 ? (
+                <div className="p-4 bg-blue-900/20 border border-blue-500/30 rounded-xl text-blue-200 text-sm text-center">
+                  此商店尚未設定員工名單
+                  <br />
+                  請聯絡店長新增您的帳號
                 </div>
-                <input
-                  type="password"
-                  value={password}
-                  onChange={(e) => setPassword(e.target.value)}
-                  className="w-full bg-slate-900 border border-slate-700 rounded-xl p-4 text-white outline-none focus:border-blue-500 text-center tracking-widest"
-                  placeholder="輸入員工密碼"
-                />
-              </>
-            ) : (
-              <div className="p-3 bg-blue-900/20 border border-blue-500/30 rounded-xl text-blue-200 text-xs text-center">
-                此商店尚未設定員工名單
-                <br />
-                您可以直接登入
-              </div>
+              ) : null}
+            </div>
+
+            {error && <p className="text-rose-500 text-xs text-center">{error}</p>}
+
+            {shopId.length >= 3 && (
+              <button
+                onClick={handleStaffLogin}
+                disabled={loading}
+                className="w-full py-4 bg-blue-600 text-white font-bold rounded-xl shadow-lg hover:bg-blue-500 transition-all active:scale-95 disabled:opacity-50 disabled:cursor-not-allowed flex items-center justify-center gap-2"
+              >
+                {loading ? (
+                  <>
+                    <RefreshCcw size={20} className="animate-spin" />
+                    登入中...
+                  </>
+                ) : (
+                  <>
+                    <Users size={20} />
+                    員工登入
+                  </>
+                )}
+              </button>
             )}
           </div>
         )}
-
-        {error && <p className="text-rose-500 text-xs text-center">{error}</p>}
-        <button
-          onClick={handleLogin}
-          className="w-full py-4 bg-slate-100 text-slate-900 font-bold rounded-xl shadow-lg hover:bg-white transition-all active:scale-95 mt-4"
-        >
-          進入系統
-        </button>
       </div>
+
       <LoginHelpModal isOpen={showHelp} onClose={() => setShowHelp(false)} />
     </div>
   );
