@@ -419,7 +419,7 @@ const safeString = (str) => (str || '').toString();
 // ==========================================
 // ★ 版本號設定 (修改這裡會同步更新登入頁與設定頁)
 // ==========================================
-const APP_VERSION = 'v16.9 (完整修復版)';
+const APP_VERSION = 'v16.1 (完整修復版)';
 const safeNumber = (num) => {
   const n = parseFloat(num);
   return isNaN(n) ? 0 : n;
@@ -4848,7 +4848,7 @@ const LoginScreen = ({ onLogin }) => {
     const handleRedirectResult = async () => {
       // 防止同一個 effect 中多次執行
       if (hasRun) {
-        console.log('Already ran in this effect');
+        console.log('[Redirect] Already ran in this effect');
         return;
       }
       hasRun = true;
@@ -4860,9 +4860,25 @@ const LoginScreen = ({ onLogin }) => {
       
       // 檢查是否有待處理的 Google 驗證
       const action = localStorage.getItem('google_auth_action');
+      const timestamp = localStorage.getItem('google_auth_timestamp');
+      
       if (!action) {
         console.log('[Redirect] No pending Google auth');
         return;
+      }
+      
+      // 檢查時間戳（5 分鐘超時）
+      if (timestamp) {
+        const elapsed = Date.now() - parseInt(timestamp);
+        const minutesElapsed = Math.floor(elapsed / 60000);
+        console.log('[Redirect] Auth started', minutesElapsed, 'minutes ago');
+        
+        if (elapsed > 5 * 60 * 1000) {
+          console.log('[Redirect] Auth timestamp expired (>5 min), clearing...');
+          localStorage.removeItem('google_auth_action');
+          localStorage.removeItem('google_auth_timestamp');
+          return;
+        }
       }
       
       console.log('[Redirect] Found action:', action);
@@ -4883,8 +4899,9 @@ const LoginScreen = ({ onLogin }) => {
           console.log('[Redirect] User ID:', userId);
           console.log('[Redirect] User Email:', userEmail);
           
-          // 清除 action 標記（重要：立即清除，防止重複執行）
+          // 清除標記（重要：立即清除，防止重複執行）
           localStorage.removeItem('google_auth_action');
+          localStorage.removeItem('google_auth_timestamp');
           
           const db = window.firebase.firestore();
           console.log('[Redirect] Fetching user doc...');
@@ -4920,13 +4937,22 @@ const LoginScreen = ({ onLogin }) => {
             setMode('google-register');
           }
         } else {
-          console.log('[Redirect] No user in result - this might be normal if no redirect happened');
-          // 如果沒有用戶但有 action 標記，可能是頁面被刷新了
-          // 不清除 action 標記，讓用戶可以重新嘗試
+          // 沒有用戶和 credential，可能是：
+          // 1. 正常頁面載入（沒有 redirect）
+          // 2. getRedirectResult 已經被調用過了
+          // 3. 舊的 action 標記
+          
+          if (!result.credential) {
+            console.log('[Redirect] No credential - likely stale action or already consumed');
+            console.log('[Redirect] Clearing stale markers...');
+            localStorage.removeItem('google_auth_action');
+            localStorage.removeItem('google_auth_timestamp');
+          }
         }
       } catch (e) {
         console.error('[Redirect] Error:', e);
         localStorage.removeItem('google_auth_action');
+        localStorage.removeItem('google_auth_timestamp');
         if (e.code !== 'auth/popup-closed-by-user') {
           setError('Google 驗證失敗：' + e.message);
         }
@@ -5018,8 +5044,15 @@ const LoginScreen = ({ onLogin }) => {
       const auth = window.firebase.auth();
       const provider = new window.firebase.auth.GoogleAuthProvider();
       
+      // 清除舊的標記
+      localStorage.removeItem('google_auth_action');
+      localStorage.removeItem('google_auth_timestamp');
+      
       // 標記這是登入流程（用於 redirect 回來後識別）
       localStorage.setItem('google_auth_action', 'login');
+      localStorage.setItem('google_auth_timestamp', Date.now().toString());
+      
+      console.log('[Login] Starting Google redirect...');
       
       // 使用 redirect 模式（適合 Web App / 主畫面模式）
       await auth.signInWithRedirect(provider);
@@ -5041,8 +5074,15 @@ const LoginScreen = ({ onLogin }) => {
       const auth = window.firebase.auth();
       const provider = new window.firebase.auth.GoogleAuthProvider();
       
+      // 清除舊的標記
+      localStorage.removeItem('google_auth_action');
+      localStorage.removeItem('google_auth_timestamp');
+      
       // 標記這是註冊流程（用於 redirect 回來後識別）
       localStorage.setItem('google_auth_action', 'register');
+      localStorage.setItem('google_auth_timestamp', Date.now().toString());
+      
+      console.log('[Register] Starting Google redirect...');
       
       // 使用 redirect 模式（適合 Web App / 主畫面模式）
       await auth.signInWithRedirect(provider);
@@ -6287,6 +6327,7 @@ const handleUpdateGridCategory = (updatedCat) => {
     setIsLoggedIn(false);
     localStorage.removeItem('bar_user_role');
     localStorage.removeItem('google_auth_action');
+    localStorage.removeItem('google_auth_timestamp');
     sessionStorage.removeItem('redirect_processed_login');
     sessionStorage.removeItem('redirect_processed_register');
     setShopId('');
