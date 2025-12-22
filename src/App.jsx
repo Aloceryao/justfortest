@@ -418,7 +418,7 @@ const safeString = (str) => (str || '').toString();
 // ==========================================
 // ★ 版本號設定 (修改這裡會同步更新登入頁與設定頁)
 // ==========================================
-const APP_VERSION = 'v16.2 (完整修復版)';
+const APP_VERSION = 'v16.3 (完整修復版)';
 const safeNumber = (num) => {
   const n = parseFloat(num);
   return isNaN(n) ? 0 : n;
@@ -4847,9 +4847,11 @@ const LoginScreen = ({ onLogin }) => {
         setLoadingStaff(true);
         try {
           const db = window.firebase.firestore();
+          // 統一轉小寫查詢
+          const normalizedShopId = shopId.toLowerCase();
           const doc = await db
             .collection('shops')
-            .doc(shopId)
+            .doc(normalizedShopId)
             .collection('settings')
             .doc('config')
             .get();
@@ -4963,35 +4965,46 @@ const LoginScreen = ({ onLogin }) => {
       const auth = window.firebase.auth();
       const db = window.firebase.firestore();
       
-      // 檢查 shopId 是否已被使用
-      const shopDoc = await db.collection('shops').doc(shopId).get();
-      if (shopDoc.exists) {
+      // 統一轉小寫（避免大小寫錯誤）
+      const normalizedShopId = shopId.toLowerCase();
+      
+      // 檢查 shopId 是否已被使用（先查小寫，再查原始輸入）
+      const shopDocLower = await db.collection('shops').doc(normalizedShopId).get();
+      if (shopDocLower.exists) {
         return setError('此商店代碼已被使用，請換一個');
+      }
+      
+      // 為了相容舊資料，也檢查原始大小寫
+      if (shopId !== normalizedShopId) {
+        const shopDocOriginal = await db.collection('shops').doc(shopId).get();
+        if (shopDocOriginal.exists) {
+          return setError('此商店代碼已被使用（大小寫不同），請換一個');
+        }
       }
       
       // 建立 Firebase Auth 帳號
       const result = await auth.createUserWithEmailAndPassword(email, password);
       const userId = result.user.uid;
       
-      // 建立 user 文件（記錄 email 對應的 shopId）
+      // 建立 user 文件（使用小寫版本）
       await db.collection('users').doc(userId).set({
         email: email,
-        shopId: shopId,
-        shopName: shopName || shopId,
+        shopId: normalizedShopId,
+        shopName: shopName || normalizedShopId,
         createdAt: new Date(),
       });
       
-      // 建立商店基本設定
-      await db.collection('shops').doc(shopId).collection('settings').doc('config').set({
-        shopName: shopName || shopId,
+      // 建立商店基本設定（使用小寫版本）
+      await db.collection('shops').doc(normalizedShopId).collection('settings').doc('config').set({
+        shopName: shopName || normalizedShopId,
         ownerId: userId,
         ownerEmail: email,
         createdAt: new Date(),
         staffList: [],
       });
       
-      // 成功註冊，直接登入
-      onLogin(shopId, 'owner');
+      // 成功註冊，直接登入（使用小寫版本）
+      onLogin(normalizedShopId, 'owner');
       
     } catch (e) {
       console.error('Register error:', e);
@@ -5030,32 +5043,43 @@ const LoginScreen = ({ onLogin }) => {
       const userId = currentUser.uid;
       const userEmail = currentUser.email;
       
-      // 檢查 shopId 是否已被使用
-      const shopDoc = await db.collection('shops').doc(shopId).get();
-      if (shopDoc.exists) {
+      // 統一轉小寫（避免大小寫錯誤）
+      const normalizedShopId = shopId.toLowerCase();
+      
+      // 檢查 shopId 是否已被使用（先查小寫，再查原始輸入）
+      const shopDocLower = await db.collection('shops').doc(normalizedShopId).get();
+      if (shopDocLower.exists) {
         return setError('此商店代碼已被使用，請換一個');
       }
       
-      // 建立 user 文件（記錄 email 對應的 shopId）
+      // 為了相容舊資料，也檢查原始大小寫
+      if (shopId !== normalizedShopId) {
+        const shopDocOriginal = await db.collection('shops').doc(shopId).get();
+        if (shopDocOriginal.exists) {
+          return setError('此商店代碼已被使用（大小寫不同），請換一個');
+        }
+      }
+      
+      // 建立 user 文件（使用小寫版本）
       await db.collection('users').doc(userId).set({
         email: userEmail,
-        shopId: shopId,
-        shopName: shopName || shopId,
+        shopId: normalizedShopId,
+        shopName: shopName || normalizedShopId,
         createdAt: new Date(),
         loginMethod: 'google',
       });
       
-      // 建立商店基本設定
-      await db.collection('shops').doc(shopId).collection('settings').doc('config').set({
-        shopName: shopName || shopId,
+      // 建立商店基本設定（使用小寫版本）
+      await db.collection('shops').doc(normalizedShopId).collection('settings').doc('config').set({
+        shopName: shopName || normalizedShopId,
         ownerId: userId,
         ownerEmail: userEmail,
         createdAt: new Date(),
         staffList: [],
       });
       
-      // 成功註冊，直接登入
-      onLogin(shopId, 'owner');
+      // 成功註冊，直接登入（使用小寫版本）
+      onLogin(normalizedShopId, 'owner');
       
     } catch (e) {
       console.error('Google register error:', e);
@@ -5097,6 +5121,9 @@ const LoginScreen = ({ onLogin }) => {
   const handleStaffLogin = async () => {
     if (!shopId) return setError('請輸入商店代碼');
     
+    // 統一轉小寫
+    const normalizedShopId = shopId.toLowerCase();
+    
     if (staffList.length > 0) {
       if (!selectedStaffId) return setError('請選擇您的名字');
       if (!staffPassword) return setError('請輸入密碼');
@@ -5106,10 +5133,10 @@ const LoginScreen = ({ onLogin }) => {
       if (staff.password !== staffPassword) return setError('員工密碼錯誤');
       
       const finalRole = staff.role === 'manager' ? 'manager' : 'staff';
-      onLogin(shopId, finalRole);
+      onLogin(normalizedShopId, finalRole);
     } else {
       // 沒有員工名單，直接以 staff 身分登入
-      onLogin(shopId, 'staff');
+      onLogin(normalizedShopId, 'staff');
     }
   };
 
@@ -5309,7 +5336,7 @@ const LoginScreen = ({ onLogin }) => {
                 value={shopId}
                 onChange={(e) => setShopId(e.target.value.toLowerCase().replace(/\s/g, '_'))}
                 className="w-full bg-slate-900 border border-slate-700 rounded-xl p-4 text-white outline-none focus:border-amber-500 font-mono"
-                placeholder="商店代碼（例如：my_bar_2024）"
+                placeholder="商店代碼（例如：my_bar）"
               />
               <input
                 type="text"
@@ -5394,7 +5421,7 @@ const LoginScreen = ({ onLogin }) => {
                 value={shopId}
                 onChange={(e) => setShopId(e.target.value.toLowerCase().replace(/\s/g, '_'))}
                 className="w-full bg-slate-900 border border-slate-700 rounded-xl p-4 text-white outline-none focus:border-amber-500 font-mono"
-                placeholder="商店代碼（例如：my_bar_2024）"
+                placeholder="商店代碼（例如：my_bar）"
                 autoFocus
               />
               <input
