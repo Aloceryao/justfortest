@@ -4853,37 +4853,53 @@ const LoginScreen = ({ onLogin }) => {
         return;
       }
       
+      console.log('═══════════════════════════════════════');
       console.log('[Redirect] useEffect 開始執行');
+      console.log('[Redirect] 時間:', new Date().toLocaleTimeString());
       
       if (!window.firebase) {
-        console.log('[Redirect] Firebase 尚未載入');
+        console.log('[Redirect] Firebase 尚未載入，稍後重試');
         return;
       }
+      console.log('[Redirect] Firebase 已載入 ✓');
       
       // 先標記為已執行，避免在處理過程中重複執行
       hasProcessedRedirect.current = true;
+      console.log('[Redirect] 已標記為處理中');
       
       try {
         const auth = window.firebase.auth();
-        console.log('[Redirect] 呼叫 getRedirectResult...');
+        console.log('[Redirect] Auth 物件已取得 ✓');
         console.log('[Redirect] 當前 URL:', window.location.href);
         console.log('[Redirect] sessionStorage google_auth_mode:', sessionStorage.getItem('google_auth_mode'));
+        console.log('[Redirect] 呼叫 getRedirectResult...');
         
         const result = await auth.getRedirectResult();
         
-        console.log('[Redirect] getRedirectResult 完成');
+        console.log('[Redirect] ✓ getRedirectResult 完成');
         console.log('[Redirect] Result object:', result);
-        console.log('[Redirect] User:', result.user ? 'YES' : 'NO');
-        console.log('[Redirect] Credential:', result.credential ? 'YES' : 'NO');
+        console.log('[Redirect] User:', result.user ? '✓ YES' : '✗ NO');
+        console.log('[Redirect] Credential:', result.credential ? '✓ YES' : '✗ NO');
         
         if (result.user) {
+          console.log('[Redirect] ✓ 找到用戶資料！');
           console.log('[Redirect] User UID:', result.user.uid);
           console.log('[Redirect] User Email:', result.user.email);
+          console.log('[Redirect] User DisplayName:', result.user.displayName);
         }
         
         // 如果沒有 user，表示不是從 redirect 回來的，或已經處理過了
         if (!result.user) {
-          console.log('[Redirect] 沒有用戶資料，正常頁面載入');
+          console.log('[Redirect] ✗ 沒有用戶資料');
+          console.log('[Redirect] 可能原因：1) 正常頁面載入 2) 已處理過 3) Redirect 失敗');
+          
+          // 清理可能殘留的 sessionStorage（避免混淆）
+          if (sessionStorage.getItem('google_auth_mode')) {
+            console.log('[Redirect] 清理殘留的 google_auth_mode');
+            sessionStorage.removeItem('google_auth_mode');
+          }
+          
+          console.log('═══════════════════════════════════════');
           return;
         }
         
@@ -4904,21 +4920,24 @@ const LoginScreen = ({ onLogin }) => {
         
         if (authMode === 'login') {
           // 登入流程
-          console.log('[Redirect] 執行登入流程');
+          console.log('[Redirect] ▶ 執行登入流程');
           if (!userDoc.exists || !userDoc.data().shopId) {
-            console.log('[Redirect] 用戶未註冊');
+            console.log('[Redirect] ✗ 用戶未註冊');
             await auth.signOut();
             setError('此 Google 帳號尚未註冊。請點擊下方「註冊新商店」進行註冊');
             setMode('select');
             setLoading(false);
+            console.log('═══════════════════════════════════════');
             return;
           }
           
           const userShopId = userDoc.data().shopId;
-          console.log('[Redirect] Shop ID:', userShopId);
-          console.log('[Redirect] 呼叫 onLogin...');
+          console.log('[Redirect] ✓ Shop ID:', userShopId);
+          console.log('[Redirect] ▶ 呼叫 onLogin...');
           onLogin(userShopId, 'owner');
-          console.log('[Redirect] onLogin 完成');
+          console.log('[Redirect] ✓ onLogin 完成');
+          console.log('[Redirect] ✓✓✓ 登入成功！應該會進入主畫面');
+          console.log('═══════════════════════════════════════');
           
         } else if (authMode === 'register') {
           // 註冊流程
@@ -4940,9 +4959,13 @@ const LoginScreen = ({ onLogin }) => {
         }
         
       } catch (e) {
-        console.error('[Redirect] 錯誤:', e);
+        console.error('═══════════════════════════════════════');
+        console.error('[Redirect] ❌ 發生錯誤！');
+        console.error('[Redirect] 錯誤物件:', e);
         console.error('[Redirect] 錯誤訊息:', e.message);
         console.error('[Redirect] 錯誤代碼:', e.code);
+        console.error('[Redirect] 錯誤堆疊:', e.stack);
+        console.error('═══════════════════════════════════════');
         // 即使發生錯誤，也不要重試（避免無限循環）
         // hasProcessedRedirect.current 已經設為 true，不會再重複執行
         setError('登入處理失敗：' + e.message);
@@ -5028,33 +5051,56 @@ const LoginScreen = ({ onLogin }) => {
 
   // ========== 店長 Google 登入 ==========
   const handleGoogleLogin = async () => {
+    console.log('═══════════════════════════════════════');
     console.log('[Google Login] 開始 Google 登入');
+    console.log('[Google Login] 時間:', new Date().toLocaleTimeString());
     setLoading(true);
     setError('');
     
     try {
+      console.log('[Google Login] 檢查 Firebase...');
+      if (!window.firebase) {
+        console.error('[Google Login] Firebase 未載入！');
+        setError('系統初始化失敗，請重新整理頁面');
+        setLoading(false);
+        return;
+      }
+      console.log('[Google Login] Firebase 已載入 ✓');
+      
       const auth = window.firebase.auth();
+      console.log('[Google Login] Auth 物件:', auth);
+      console.log('[Google Login] Firebase Auth 當前用戶:', auth.currentUser);
+      
       const provider = new window.firebase.auth.GoogleAuthProvider();
+      console.log('[Google Login] Provider 已建立 ✓');
       
       // 使用 Redirect 模式（手機和電腦都適用）
       // 標記這是登入流程（用 sessionStorage，iOS 跳轉時會保留）
       console.log('[Google Login] 當前 URL:', window.location.href);
       console.log('[Google Login] 設定 sessionStorage: google_auth_mode = login');
       sessionStorage.setItem('google_auth_mode', 'login');
-      console.log('[Google Login] sessionStorage 設定完成');
-      console.log('[Google Login] 檢查 sessionStorage:', sessionStorage.getItem('google_auth_mode'));
-      
-      // 檢查 Firebase Auth 狀態
-      console.log('[Google Login] Firebase Auth 當前用戶:', auth.currentUser);
+      console.log('[Google Login] sessionStorage 設定完成 ✓');
+      console.log('[Google Login] 驗證 sessionStorage:', sessionStorage.getItem('google_auth_mode'));
       
       // 跳轉到 Google 驗證（之後的程式碼不會執行）
-      console.log('[Google Login] 呼叫 signInWithRedirect...');
-      console.log('[Google Login] Provider:', provider);
+      console.log('[Google Login] 準備呼叫 signInWithRedirect...');
+      console.log('[Google Login] 即將跳轉，之後的訊息不應該出現');
+      console.log('═══════════════════════════════════════');
+      
       await auth.signInWithRedirect(provider);
-      console.log('[Google Login] signInWithRedirect 完成（這行不應該出現）');
+      
+      // 這行不應該被執行到（因為會跳轉）
+      console.error('[Google Login] ⚠️ 警告：signInWithRedirect 後的程式碼被執行了！');
+      console.error('[Google Login] ⚠️ 這表示沒有成功跳轉到 Google');
       
     } catch (e) {
-      console.error('[Google Login] 錯誤:', e);
+      console.error('═══════════════════════════════════════');
+      console.error('[Google Login] ❌ 發生錯誤！');
+      console.error('[Google Login] 錯誤物件:', e);
+      console.error('[Google Login] 錯誤訊息:', e.message);
+      console.error('[Google Login] 錯誤代碼:', e.code);
+      console.error('[Google Login] 錯誤堆疊:', e.stack);
+      console.error('═══════════════════════════════════════');
       setError('Google 登入失敗：' + e.message);
       setLoading(false);
     }
