@@ -419,7 +419,7 @@ const safeString = (str) => (str || '').toString();
 // ==========================================
 // ★ 版本號設定 (修改這裡會同步更新登入頁與設定頁)
 // ==========================================
-const APP_VERSION = 'v16.6 (完整修復版)';
+const APP_VERSION = 'v16.7 (完整修復版)';
 const safeNumber = (num) => {
   const n = parseFloat(num);
   return isNaN(n) ? 0 : n;
@@ -5051,92 +5051,103 @@ const LoginScreen = ({ onLogin }) => {
 
   // ========== 店長 Google 登入 ==========
   const handleGoogleLogin = async () => {
-    console.log('═══════════════════════════════════════');
-    console.log('[Google Login] ⭐⭐⭐ 函數開始執行！ ⭐⭐⭐');
-    console.log('[Google Login] 時間:', new Date().toLocaleTimeString());
-    console.log('[Google Login] 這是第一行，如果看到這行表示函數有被呼叫');
+    // 清除舊的 debug log
+    localStorage.removeItem('google_login_debug');
     
-    // 先顯示一個 alert 確認按鈕有被觸發
-    console.log('[Google Login] 🔔 設定錯誤訊息測試...');
+    // 記錄到 localStorage，即使頁面重新載入也能看到
+    const log = (msg) => {
+      console.log(msg);
+      const logs = JSON.parse(localStorage.getItem('google_login_debug') || '[]');
+      logs.push(`${new Date().toLocaleTimeString()} - ${msg}`);
+      localStorage.setItem('google_login_debug', JSON.stringify(logs.slice(-20))); // 保留最近 20 條
+    };
+    
+    log('═══════════════════════════════════════');
+    log('[Google Login] ⭐⭐⭐ 函數開始執行！ ⭐⭐⭐');
+    log('[Google Login] 時間: ' + new Date().toLocaleTimeString());
+    log('[Google Login] 這是第一行，如果看到這行表示函數有被呼叫');
+    
+    // 先顯示一個錯誤訊息
+    log('[Google Login] 🔔 設定錯誤訊息測試...');
     setError('正在連接 Google...（如果卡住請重新整理）');
     
     setLoading(true);
     
     try {
-      console.log('[Google Login] 檢查 Firebase...');
+      log('[Google Login] 檢查 Firebase...');
       if (!window.firebase) {
-        console.error('[Google Login] ❌ Firebase 未載入！');
+        log('[Google Login] ❌ Firebase 未載入！');
         setError('系統初始化失敗，請重新整理頁面');
         setLoading(false);
         return;
       }
-      console.log('[Google Login] Firebase 已載入 ✓');
-      console.log('[Google Login] Firebase 版本:', window.firebase.SDK_VERSION);
+      log('[Google Login] Firebase 已載入 ✓');
+      log('[Google Login] Firebase 版本: ' + window.firebase.SDK_VERSION);
       
       const auth = window.firebase.auth();
-      console.log('[Google Login] Auth 物件:', auth);
-      console.log('[Google Login] Auth 是否已初始化:', !!auth);
-      console.log('[Google Login] Firebase Auth 當前用戶:', auth.currentUser);
+      log('[Google Login] Auth 物件已取得');
+      log('[Google Login] Auth 是否已初始化: ' + !!auth);
+      log('[Google Login] Firebase Auth 當前用戶: ' + (auth.currentUser ? auth.currentUser.email : 'null'));
       
       // 檢查是否已經有用戶登入
       if (auth.currentUser) {
-        console.log('[Google Login] ⚠️ 偵測到已登入的用戶，先登出...');
+        log('[Google Login] ⚠️ 偵測到已登入的用戶，先登出...');
         await auth.signOut();
-        console.log('[Google Login] ✓ 已登出舊用戶');
+        log('[Google Login] ✓ 已登出舊用戶');
       }
       
       const provider = new window.firebase.auth.GoogleAuthProvider();
-      console.log('[Google Login] Provider 已建立 ✓');
-      console.log('[Google Login] Provider 物件:', provider);
+      log('[Google Login] Provider 已建立 ✓');
       
       // 使用 Redirect 模式（手機和電腦都適用）
       // 標記這是登入流程（用 sessionStorage，iOS 跳轉時會保留）
-      console.log('[Google Login] 當前 URL:', window.location.href);
-      console.log('[Google Login] 當前 protocol:', window.location.protocol);
-      console.log('[Google Login] 當前 hostname:', window.location.hostname);
-      console.log('[Google Login] 設定 sessionStorage: google_auth_mode = login');
+      log('[Google Login] 當前 URL: ' + window.location.href);
+      log('[Google Login] 當前 protocol: ' + window.location.protocol);
+      log('[Google Login] 當前 hostname: ' + window.location.hostname);
+      log('[Google Login] 設定 sessionStorage: google_auth_mode = login');
       sessionStorage.setItem('google_auth_mode', 'login');
-      console.log('[Google Login] sessionStorage 設定完成 ✓');
-      console.log('[Google Login] 驗證 sessionStorage:', sessionStorage.getItem('google_auth_mode'));
+      log('[Google Login] sessionStorage 設定完成 ✓');
+      log('[Google Login] 驗證 sessionStorage: ' + sessionStorage.getItem('google_auth_mode'));
       
       // 檢查 Firebase 配置
-      console.log('[Google Login] 檢查 Firebase Config:');
+      log('[Google Login] 檢查 Firebase Config:');
       const config = auth.app.options;
-      console.log('[Google Login] API Key:', config.apiKey ? '✓ 已設定' : '✗ 未設定');
-      console.log('[Google Login] Auth Domain:', config.authDomain);
-      console.log('[Google Login] Project ID:', config.projectId);
+      log('[Google Login] API Key: ' + (config.apiKey ? '✓ 已設定' : '✗ 未設定'));
+      log('[Google Login] Auth Domain: ' + config.authDomain);
+      log('[Google Login] Project ID: ' + config.projectId);
       
       // 跳轉到 Google 驗證（之後的程式碼不會執行）
-      console.log('[Google Login] 🚀 準備呼叫 signInWithRedirect...');
-      console.log('[Google Login] ⏳ 即將跳轉到 Google（應該會離開此頁面）');
-      console.log('═══════════════════════════════════════');
+      log('[Google Login] 🚀 準備呼叫 signInWithRedirect...');
+      log('[Google Login] ⏳ 即將跳轉到 Google（應該會離開此頁面）');
+      log('═══════════════════════════════════════');
       
       setError('跳轉到 Google 中...');
       
       // 使用 Promise 確保捕捉錯誤
       await auth.signInWithRedirect(provider).catch((redirectError) => {
-        console.error('[Google Login] ❌ signInWithRedirect 發生錯誤！');
-        console.error('[Google Login] 錯誤:', redirectError);
+        log('[Google Login] ❌ signInWithRedirect 發生錯誤！');
+        log('[Google Login] 錯誤: ' + redirectError.message);
+        log('[Google Login] 錯誤代碼: ' + redirectError.code);
         throw redirectError;
       });
       
       // 這行不應該被執行到（因為會跳轉）
-      console.error('═══════════════════════════════════════');
-      console.error('[Google Login] ⚠️⚠️⚠️ 警告：signInWithRedirect 後的程式碼被執行了！');
-      console.error('[Google Login] ⚠️ 這表示沒有成功跳轉到 Google');
-      console.error('[Google Login] ⚠️ 這是不正常的狀況！');
-      console.error('═══════════════════════════════════════');
+      log('═══════════════════════════════════════');
+      log('[Google Login] ⚠️⚠️⚠️ 警告：signInWithRedirect 後的程式碼被執行了！');
+      log('[Google Login] ⚠️ 這表示沒有成功跳轉到 Google');
+      log('[Google Login] ⚠️ 這是不正常的狀況！');
+      log('═══════════════════════════════════════');
       setError('跳轉失敗：未能連接到 Google 登入頁面');
       setLoading(false);
       
     } catch (e) {
-      console.error('═══════════════════════════════════════');
-      console.error('[Google Login] ❌ 發生錯誤！');
-      console.error('[Google Login] 錯誤物件:', e);
-      console.error('[Google Login] 錯誤訊息:', e.message);
-      console.error('[Google Login] 錯誤代碼:', e.code);
-      console.error('[Google Login] 錯誤堆疊:', e.stack);
-      console.error('═══════════════════════════════════════');
+      log('═══════════════════════════════════════');
+      log('[Google Login] ❌ 發生錯誤！');
+      log('[Google Login] 錯誤訊息: ' + e.message);
+      log('[Google Login] 錯誤代碼: ' + e.code);
+      log('[Google Login] 錯誤 stack: ' + (e.stack || 'N/A'));
+      log('═══════════════════════════════════════');
+      console.error('[Google Login] 完整錯誤物件:', e);
       setError('Google 登入失敗：' + e.message);
       setLoading(false);
     }
@@ -6224,6 +6235,19 @@ const handleUpdateGridCategory = (updatedCat) => {
 
   useEffect(() => {
     console.log('[App Init] ========== MainAppContent 初始化 ==========');
+    
+    // 顯示之前的 Google 登入 debug log
+    const debugLogs = localStorage.getItem('google_login_debug');
+    if (debugLogs) {
+      console.log('🔍🔍🔍 上次 Google 登入的 Debug Log: 🔍🔍🔍');
+      try {
+        const logs = JSON.parse(debugLogs);
+        logs.forEach(log => console.log(log));
+      } catch (e) {
+        console.log('無法解析 debug log');
+      }
+      console.log('🔍🔍🔍 Debug Log 結束 🔍🔍🔍');
+    }
     
     const params = new URLSearchParams(window.location.search);
     const urlShop = params.get('shop');
