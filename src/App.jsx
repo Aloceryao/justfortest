@@ -419,7 +419,7 @@ const safeString = (str) => (str || '').toString();
 // ==========================================
 // ★ 版本號設定 (修改這裡會同步更新登入頁與設定頁)
 // ==========================================
-const APP_VERSION = 'v16.2 (完整修復版)';
+const APP_VERSION = 'v16.3 (完整修復版)';
 const safeNumber = (num) => {
   const n = parseFloat(num);
   return isNaN(n) ? 0 : n;
@@ -4848,11 +4848,13 @@ const LoginScreen = ({ onLogin }) => {
     const handleRedirectResult = async () => {
       // 防止同一個 effect 中多次執行
       if (hasRun) {
+        console.log('[Redirect] Already ran');
         return;
       }
       hasRun = true;
       
       if (!window.firebase) {
+        console.log('[Redirect] Firebase not ready');
         return;
       }
       
@@ -4861,27 +4863,41 @@ const LoginScreen = ({ onLogin }) => {
       const timestamp = localStorage.getItem('google_auth_timestamp');
       
       if (!action) {
+        console.log('[Redirect] No pending action');
         return;
       }
+      
+      console.log('[Redirect] Found action:', action);
       
       // 檢查時間戳（5 分鐘超時）
       if (timestamp) {
         const elapsed = Date.now() - parseInt(timestamp);
+        const minutes = Math.floor(elapsed / 60000);
+        console.log('[Redirect] Action started', minutes, 'minutes ago');
         
         if (elapsed > 5 * 60 * 1000) {
+          console.log('[Redirect] Action expired, clearing');
           localStorage.removeItem('google_auth_action');
           localStorage.removeItem('google_auth_timestamp');
           return;
         }
       }
       
+      console.log('[Redirect] Calling getRedirectResult...');
+      
       try {
         const auth = window.firebase.auth();
         const result = await auth.getRedirectResult();
         
+        console.log('[Redirect] getRedirectResult completed');
+        console.log('[Redirect] User:', result.user ? 'YES' : 'NO');
+        console.log('[Redirect] Credential:', result.credential ? 'YES' : 'NO');
+        
         if (result.user) {
           const userId = result.user.uid;
           const userEmail = result.user.email;
+          
+          console.log('[Redirect] Processing user:', userId);
           
           // 清除標記（重要：立即清除，防止重複執行）
           localStorage.removeItem('google_auth_action');
@@ -4890,26 +4906,32 @@ const LoginScreen = ({ onLogin }) => {
           const db = window.firebase.firestore();
           const userDoc = await db.collection('users').doc(userId).get();
           
+          console.log('[Redirect] User doc exists:', userDoc.exists);
+          
           if (action === 'login') {
             // 登入流程
             if (!userDoc.exists || !userDoc.data().shopId) {
+              console.log('[Redirect] User not registered');
               await auth.signOut();
               setError('此 Google 帳號尚未註冊。請點擊下方「註冊新商店」進行註冊');
               setMode('select');
               return;
             }
             const userShopId = userDoc.data().shopId;
+            console.log('[Redirect] Logging in with shopId:', userShopId);
             onLogin(userShopId, 'owner');
             
           } else if (action === 'register') {
             // 註冊流程
             if (userDoc.exists && userDoc.data().shopId) {
+              console.log('[Redirect] User already registered');
               await auth.signOut();
               setError('此 Google 帳號已註冊。請返回登入頁面進行登入');
               setMode('select');
               return;
             }
             // 進入填寫商店資料流程
+            console.log('[Redirect] Entering google-register mode');
             setEmail(userEmail);
             setMode('google-register');
           }
@@ -4919,7 +4941,10 @@ const LoginScreen = ({ onLogin }) => {
           // 2. getRedirectResult 已經被調用過了
           // 3. 舊的 action 標記
           
+          console.log('[Redirect] No user in result');
+          
           if (!result.credential) {
+            console.log('[Redirect] No credential, clearing markers');
             localStorage.removeItem('google_auth_action');
             localStorage.removeItem('google_auth_timestamp');
           }
@@ -5025,12 +5050,17 @@ const LoginScreen = ({ onLogin }) => {
         const userId = result.user.uid;
         const userEmail = result.user.email;
         
+        console.log('[Login] Popup success, user:', userId);
+        
         // 檢查是否已綁定商店
         const db = window.firebase.firestore();
         const userDoc = await db.collection('users').doc(userId).get();
         
+        console.log('[Login] User doc exists:', userDoc.exists);
+        
         if (!userDoc.exists || !userDoc.data().shopId) {
           // 未註冊的用戶，登出並提示去註冊
+          console.log('[Login] User not registered, signing out');
           await auth.signOut();
           setError('此 Google 帳號尚未註冊。請點擊下方「註冊新商店」進行註冊');
           setLoading(false);
@@ -5038,7 +5068,9 @@ const LoginScreen = ({ onLogin }) => {
         }
         
         const userShopId = userDoc.data().shopId;
+        console.log('[Login] Logging in with shopId:', userShopId);
         onLogin(userShopId, 'owner');
+        // 登入成功後 loading 由 onLogin 觸發的頁面切換自動處理
         
       } catch (popupError) {
         // Popup 失敗，改用 Redirect 模式
@@ -5086,12 +5118,17 @@ const LoginScreen = ({ onLogin }) => {
         const userId = result.user.uid;
         const userEmail = result.user.email;
         
+        console.log('[Register] Popup success, user:', userId);
+        
         // 檢查是否已經註冊過
         const db = window.firebase.firestore();
         const userDoc = await db.collection('users').doc(userId).get();
         
+        console.log('[Register] User doc exists:', userDoc.exists);
+        
         if (userDoc.exists && userDoc.data().shopId) {
           // 已經註冊過，提示去登入
+          console.log('[Register] User already registered');
           await auth.signOut();
           setError('此 Google 帳號已註冊。請返回登入頁面進行登入');
           setLoading(false);
@@ -5099,6 +5136,7 @@ const LoginScreen = ({ onLogin }) => {
         }
         
         // 首次註冊，進入填寫商店資料流程
+        console.log('[Register] Entering google-register mode');
         setEmail(userEmail);
         setMode('google-register');
         setLoading(false);
