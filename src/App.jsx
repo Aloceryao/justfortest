@@ -419,7 +419,7 @@ const safeString = (str) => (str || '').toString();
 // ==========================================
 // ★ 版本號設定 (修改這裡會同步更新登入頁與設定頁)
 // ==========================================
-const APP_VERSION = 'v16.10 (登入測試完整版)';
+const APP_VERSION = 'v16.10.1 (登入測試完整版)';
 const safeNumber = (num) => {
   const n = parseFloat(num);
   return isNaN(n) ? 0 : n;
@@ -2869,7 +2869,7 @@ const IngredientPickerModal = ({
             >
               全部
             </button>
-            {categories && categories.map(c => (
+            {categories && Array.isArray(categories) && categories.map(c => (
                <button
                key={c.id}
                onClick={() => setFilterType(c.id)}
@@ -2916,7 +2916,7 @@ const IngredientPickerModal = ({
   );
 };
 
-const QuickCalcScreen = ({ ingredients, availableBases, onCreateRecipe }) => {
+const QuickCalcScreen = ({ ingredients, availableBases, onCreateRecipe, ingCategories }) => {
   const [mode, setMode] = useState('single');
   const [price, setPrice] = useState('');
   const [volume, setVolume] = useState(700);
@@ -2957,11 +2957,6 @@ const QuickCalcScreen = ({ ingredients, availableBases, onCreateRecipe }) => {
     if(onCreateRecipe) onCreateRecipe(recipeData);
   };
 
-  const ingCategories = [
-    { id: 'alcohol', label: '基酒 Alcohol' },
-    { id: 'soft', label: '軟性飲料 Soft' },
-    { id: 'other', label: '其他 Other' },
-  ];
   return (
     <div className="h-full flex flex-col animate-fade-in text-slate-200 w-full bg-slate-950">
       <div className="shrink-0 bg-slate-950/95 backdrop-blur z-20 border-b border-slate-800 p-4 pt-safe">
@@ -7006,6 +7001,7 @@ const handleUpdateGridCategory = (updatedCat) => {
             ingredients={ingredients}
             availableBases={availableBases}
             onCreateRecipe={(draftItem) => startEdit('recipe', draftItem)}
+            ingCategories={ingCategories}
           />
         )}
 
