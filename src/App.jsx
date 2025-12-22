@@ -419,7 +419,7 @@ const safeString = (str) => (str || '').toString();
 // ==========================================
 // ★ 版本號設定 (修改這裡會同步更新登入頁與設定頁)
 // ==========================================
-const APP_VERSION = 'v16.7 (完整修復版)';
+const APP_VERSION = 'v16.8 (完整修復版)';
 const safeNumber = (num) => {
   const n = parseFloat(num);
   return isNaN(n) ? 0 : n;
@@ -4842,7 +4842,69 @@ const LoginScreen = ({ onLogin }) => {
   const [showHelp, setShowHelp] = useState(false);
 
   // 處理 Google Redirect 回來的結果
-  // 移除 Redirect 處理（簡化為只使用 Popup 模式）
+  useEffect(() => {
+    const handleRedirectResult = async () => {
+      if (!window.firebase) return;
+      
+      try {
+        const auth = window.firebase.auth();
+        const result = await auth.getRedirectResult();
+        
+        // 如果沒有 user，表示不是從 redirect 回來的，或已經處理過了
+        if (!result.user) {
+          return;
+        }
+        
+        const userId = result.user.uid;
+        const userEmail = result.user.email;
+        
+        // 檢查是登入還是註冊（從 sessionStorage 讀取）
+        const mode = sessionStorage.getItem('google_auth_mode') || 'login';
+        sessionStorage.removeItem('google_auth_mode'); // 立即清除，避免重複處理
+        
+        const db = window.firebase.firestore();
+        const userDoc = await db.collection('users').doc(userId).get();
+        
+        if (mode === 'login') {
+          // 登入流程
+          if (!userDoc.exists || !userDoc.data().shopId) {
+            await auth.signOut();
+            setError('此 Google 帳號尚未註冊。請點擊下方「註冊新商店」進行註冊');
+            setMode('select');
+            setLoading(false);
+            return;
+          }
+          
+          const userShopId = userDoc.data().shopId;
+          onLogin(userShopId, 'owner');
+          
+        } else if (mode === 'register') {
+          // 註冊流程
+          if (userDoc.exists && userDoc.data().shopId) {
+            await auth.signOut();
+            setError('此 Google 帳號已註冊。請返回登入頁面進行登入');
+            setMode('select');
+            setLoading(false);
+            return;
+          }
+          
+          // 進入填寫商店資料流程
+          setEmail(userEmail);
+          setMode('google-register');
+          setLoading(false);
+        }
+        
+      } catch (e) {
+        console.error('處理 Redirect 結果錯誤:', e);
+        setError('登入處理失敗：' + e.message);
+        setLoading(false);
+      }
+    };
+    
+    // 延遲執行，確保 Firebase 初始化完成
+    const timer = setTimeout(handleRedirectResult, 500);
+    return () => clearTimeout(timer);
+  }, [onLogin]);
 
   // 店員模式：自動載入店員名單
   useEffect(() => {
@@ -4924,35 +4986,16 @@ const LoginScreen = ({ onLogin }) => {
       const auth = window.firebase.auth();
       const provider = new window.firebase.auth.GoogleAuthProvider();
       
-      // 只使用 Popup 模式（簡單可靠）
-      const result = await auth.signInWithPopup(provider);
-      const userId = result.user.uid;
-      const userEmail = result.user.email;
+      // 使用 Redirect 模式（手機和電腦都適用）
+      // 標記這是登入流程（用 sessionStorage，iOS 跳轉時會保留）
+      sessionStorage.setItem('google_auth_mode', 'login');
       
-      // 檢查是否已綁定商店
-      const db = window.firebase.firestore();
-      const userDoc = await db.collection('users').doc(userId).get();
-      
-      if (!userDoc.exists || !userDoc.data().shopId) {
-        // 未註冊的用戶，登出並提示去註冊
-        await auth.signOut();
-        setError('此 Google 帳號尚未註冊。請點擊下方「註冊新商店」進行註冊');
-        setLoading(false);
-        return;
-      }
-      
-      const userShopId = userDoc.data().shopId;
-      onLogin(userShopId, 'owner');
+      // 跳轉到 Google 驗證（之後的程式碼不會執行）
+      await auth.signInWithRedirect(provider);
       
     } catch (e) {
-      console.error('[Login] Error:', e);
-      if (e.code === 'auth/popup-closed-by-user') {
-        setError('已取消登入');
-      } else if (e.code === 'auth/popup-blocked') {
-        setError('彈出視窗被封鎖。建議：\n1. 允許彈出視窗\n2. 或用電腦瀏覽器登入\n3. 或使用 Email 密碼登入');
-      } else {
-        setError('Google 登入失敗：' + e.message);
-      }
+      console.error('Google 登入錯誤:', e);
+      setError('Google 登入失敗：' + e.message);
       setLoading(false);
     }
   };
@@ -4966,37 +5009,21 @@ const LoginScreen = ({ onLogin }) => {
       const auth = window.firebase.auth();
       const provider = new window.firebase.auth.GoogleAuthProvider();
       
-      // 只使用 Popup 模式（簡單可靠）
-      const result = await auth.signInWithPopup(provider);
-      const userId = result.user.uid;
-      const userEmail = result.user.email;
+      // 提示選擇帳號
+      provider.setCustomParameters({
+        prompt: 'select_account'
+      });
       
-      // 檢查是否已經註冊過
-      const db = window.firebase.firestore();
-      const userDoc = await db.collection('users').doc(userId).get();
+      // 使用 Redirect 模式（手機和電腦都適用）
+      // 標記這是註冊流程（用 sessionStorage，iOS 跳轉時會保留）
+      sessionStorage.setItem('google_auth_mode', 'register');
       
-      if (userDoc.exists && userDoc.data().shopId) {
-        // 已經註冊過，提示去登入
-        await auth.signOut();
-        setError('此 Google 帳號已註冊。請返回登入頁面進行登入');
-        setLoading(false);
-        return;
-      }
-      
-      // 首次註冊，進入填寫商店資料流程
-      setEmail(userEmail);
-      setMode('google-register');
-      setLoading(false);
+      // 跳轉到 Google 驗證（之後的程式碼不會執行）
+      await auth.signInWithRedirect(provider);
       
     } catch (e) {
-      console.error('[Register] Error:', e);
-      if (e.code === 'auth/popup-closed-by-user') {
-        setError('已取消註冊');
-      } else if (e.code === 'auth/popup-blocked') {
-        setError('彈出視窗被封鎖。建議：\n1. 允許彈出視窗\n2. 或用電腦瀏覽器註冊\n3. 或使用 Email 密碼註冊');
-      } else {
-        setError('Google 註冊失敗：' + e.message);
-      }
+      console.error('Google 註冊錯誤:', e);
+      setError('Google 註冊失敗：' + e.message);
       setLoading(false);
     }
   };
@@ -6031,29 +6058,6 @@ const handleUpdateGridCategory = (updatedCat) => {
       ];
     }
   });
-
-  // ========== 臨時除錯工具（iOS）==========
-  useEffect(() => {
-    // 只在 iOS 或移動設備上啟用 eruda
-    const isMobile = /iPhone|iPad|iPod|Android/i.test(navigator.userAgent);
-    
-    if (isMobile && !window.eruda) {
-      console.log('[Debug] Loading eruda for mobile debugging...');
-      const script = document.createElement('script');
-      script.src = 'https://cdn.jsdelivr.net/npm/eruda';
-      document.body.appendChild(script);
-      script.onload = () => {
-        if (window.eruda) {
-          window.eruda.init();
-          console.log('[Debug] Eruda initialized successfully!');
-          console.log('[Debug] 📱 點擊右下角的綠色按鈕可以看到 Console');
-        }
-      };
-      script.onerror = () => {
-        console.error('[Debug] Failed to load eruda');
-      };
-    }
-  }, []);
 
   useEffect(() => {
     localStorage.setItem(
