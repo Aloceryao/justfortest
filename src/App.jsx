@@ -419,7 +419,7 @@ const safeString = (str) => (str || '').toString();
 // ==========================================
 // ★ 版本號設定 (修改這裡會同步更新登入頁與設定頁)
 // ==========================================
-const APP_VERSION = 'v16.4 (完整修復版)';
+const APP_VERSION = 'v16.5 (完整修復版)';
 const safeNumber = (num) => {
   const n = parseFloat(num);
   return isNaN(n) ? 0 : n;
@@ -5051,47 +5051,86 @@ const LoginScreen = ({ onLogin }) => {
 
   // ========== 店長 Google 登入 ==========
   const handleGoogleLogin = async () => {
+    // 立即顯示 alert 確認函數被執行
+    alert('🔔 handleGoogleLogin 函數被執行了！請查看 Console');
+    
     console.log('═══════════════════════════════════════');
+    console.log('[Google Login] ⭐⭐⭐ 按鈕被點擊了！ ⭐⭐⭐');
     console.log('[Google Login] 開始 Google 登入');
     console.log('[Google Login] 時間:', new Date().toLocaleTimeString());
+    
+    // 先顯示一個 alert 確認按鈕有被觸發
+    console.log('[Google Login] 🔔 設定錯誤訊息測試...');
+    setError('正在連接 Google...（如果卡住請重新整理）');
+    
     setLoading(true);
-    setError('');
     
     try {
       console.log('[Google Login] 檢查 Firebase...');
       if (!window.firebase) {
-        console.error('[Google Login] Firebase 未載入！');
+        console.error('[Google Login] ❌ Firebase 未載入！');
         setError('系統初始化失敗，請重新整理頁面');
         setLoading(false);
         return;
       }
       console.log('[Google Login] Firebase 已載入 ✓');
+      console.log('[Google Login] Firebase 版本:', window.firebase.SDK_VERSION);
       
       const auth = window.firebase.auth();
       console.log('[Google Login] Auth 物件:', auth);
+      console.log('[Google Login] Auth 是否已初始化:', !!auth);
       console.log('[Google Login] Firebase Auth 當前用戶:', auth.currentUser);
+      
+      // 檢查是否已經有用戶登入
+      if (auth.currentUser) {
+        console.log('[Google Login] ⚠️ 偵測到已登入的用戶，先登出...');
+        await auth.signOut();
+        console.log('[Google Login] ✓ 已登出舊用戶');
+      }
       
       const provider = new window.firebase.auth.GoogleAuthProvider();
       console.log('[Google Login] Provider 已建立 ✓');
+      console.log('[Google Login] Provider 物件:', provider);
       
       // 使用 Redirect 模式（手機和電腦都適用）
       // 標記這是登入流程（用 sessionStorage，iOS 跳轉時會保留）
       console.log('[Google Login] 當前 URL:', window.location.href);
+      console.log('[Google Login] 當前 protocol:', window.location.protocol);
+      console.log('[Google Login] 當前 hostname:', window.location.hostname);
       console.log('[Google Login] 設定 sessionStorage: google_auth_mode = login');
       sessionStorage.setItem('google_auth_mode', 'login');
       console.log('[Google Login] sessionStorage 設定完成 ✓');
       console.log('[Google Login] 驗證 sessionStorage:', sessionStorage.getItem('google_auth_mode'));
       
+      // 檢查 Firebase 配置
+      console.log('[Google Login] 檢查 Firebase Config:');
+      const config = auth.app.options;
+      console.log('[Google Login] API Key:', config.apiKey ? '✓ 已設定' : '✗ 未設定');
+      console.log('[Google Login] Auth Domain:', config.authDomain);
+      console.log('[Google Login] Project ID:', config.projectId);
+      
       // 跳轉到 Google 驗證（之後的程式碼不會執行）
-      console.log('[Google Login] 準備呼叫 signInWithRedirect...');
-      console.log('[Google Login] 即將跳轉，之後的訊息不應該出現');
+      console.log('[Google Login] 🚀 準備呼叫 signInWithRedirect...');
+      console.log('[Google Login] ⏳ 即將跳轉到 Google（應該會離開此頁面）');
       console.log('═══════════════════════════════════════');
       
-      await auth.signInWithRedirect(provider);
+      setError('跳轉到 Google 中...');
+      
+      // 使用 Promise 確保捕捉錯誤
+      await auth.signInWithRedirect(provider).catch((redirectError) => {
+        console.error('[Google Login] ❌ signInWithRedirect 發生錯誤！');
+        console.error('[Google Login] 錯誤:', redirectError);
+        throw redirectError;
+      });
       
       // 這行不應該被執行到（因為會跳轉）
-      console.error('[Google Login] ⚠️ 警告：signInWithRedirect 後的程式碼被執行了！');
+      console.error('═══════════════════════════════════════');
+      console.error('[Google Login] ⚠️⚠️⚠️ 警告：signInWithRedirect 後的程式碼被執行了！');
       console.error('[Google Login] ⚠️ 這表示沒有成功跳轉到 Google');
+      console.error('[Google Login] ⚠️ 這是不正常的狀況！');
+      console.error('═══════════════════════════════════════');
+      setError('跳轉失敗：未能連接到 Google 登入頁面');
+      setLoading(false);
       
     } catch (e) {
       console.error('═══════════════════════════════════════');
@@ -5459,7 +5498,10 @@ const LoginScreen = ({ onLogin }) => {
             </div>
 
             <button
-              onClick={handleGoogleLogin}
+              onClick={() => {
+                console.log('🔴🔴🔴 按鈕被點擊！開始執行 handleGoogleLogin 🔴🔴🔴');
+                handleGoogleLogin();
+              }}
               disabled={loading}
               className="w-full py-4 bg-white text-slate-900 font-bold rounded-xl shadow-lg hover:bg-slate-100 transition-all active:scale-95 disabled:opacity-50 disabled:cursor-not-allowed flex items-center justify-center gap-3"
             >
