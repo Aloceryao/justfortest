@@ -418,7 +418,7 @@ const safeString = (str) => (str || '').toString();
 // ==========================================
 // ★ 版本號設定 (修改這裡會同步更新登入頁與設定頁)
 // ==========================================
-const APP_VERSION = 'v16.1 (完整修復版)';
+const APP_VERSION = 'v16.2 ';
 const safeNumber = (num) => {
   const n = parseFloat(num);
   return isNaN(n) ? 0 : n;
@@ -4919,15 +4919,17 @@ const LoginScreen = ({ onLogin }) => {
       const provider = new window.firebase.auth.GoogleAuthProvider();
       const result = await auth.signInWithPopup(provider);
       const userId = result.user.uid;
+      const userEmail = result.user.email;
       
       // 檢查是否已綁定商店
       const db = window.firebase.firestore();
       const userDoc = await db.collection('users').doc(userId).get();
       
       if (!userDoc.exists || !userDoc.data().shopId) {
-        // 首次使用 Google 登入，需要建立商店
-        await auth.signOut();
-        setError('請先用 Email 註冊商店，或聯絡管理員');
+        // 首次使用 Google 登入，進入註冊流程
+        setEmail(userEmail);
+        setMode('google-register');
+        setLoading(false);
         return;
       }
       
@@ -4938,6 +4940,8 @@ const LoginScreen = ({ onLogin }) => {
       console.error('Google login error:', e);
       if (e.code === 'auth/popup-closed-by-user') {
         setError('已取消登入');
+      } else if (e.code === 'auth/popup-blocked') {
+        setError('彈出視窗被封鎖，請在新分頁中開啟或允許彈出視窗');
       } else {
         setError('Google 登入失敗：' + e.message);
       }
@@ -4999,6 +5003,90 @@ const LoginScreen = ({ onLogin }) => {
         setError('密碼強度不足（至少 6 個字元）');
       } else {
         setError('註冊失敗：' + e.message);
+      }
+    } finally {
+      setLoading(false);
+    }
+  };
+
+  // ========== Google 註冊新商店 ==========
+  const handleGoogleRegister = async () => {
+    if (!shopId) return setError('請輸入商店代碼');
+    
+    setLoading(true);
+    setError('');
+    
+    try {
+      const auth = window.firebase.auth();
+      const db = window.firebase.firestore();
+      const currentUser = auth.currentUser;
+      
+      if (!currentUser) {
+        setError('登入狀態已過期，請重新登入');
+        setMode('select');
+        return;
+      }
+      
+      const userId = currentUser.uid;
+      const userEmail = currentUser.email;
+      
+      // 檢查 shopId 是否已被使用
+      const shopDoc = await db.collection('shops').doc(shopId).get();
+      if (shopDoc.exists) {
+        return setError('此商店代碼已被使用，請換一個');
+      }
+      
+      // 建立 user 文件（記錄 email 對應的 shopId）
+      await db.collection('users').doc(userId).set({
+        email: userEmail,
+        shopId: shopId,
+        shopName: shopName || shopId,
+        createdAt: new Date(),
+        loginMethod: 'google',
+      });
+      
+      // 建立商店基本設定
+      await db.collection('shops').doc(shopId).collection('settings').doc('config').set({
+        shopName: shopName || shopId,
+        ownerId: userId,
+        ownerEmail: userEmail,
+        createdAt: new Date(),
+        staffList: [],
+      });
+      
+      // 成功註冊，直接登入
+      onLogin(shopId, 'owner');
+      
+    } catch (e) {
+      console.error('Google register error:', e);
+      setError('註冊失敗：' + e.message);
+    } finally {
+      setLoading(false);
+    }
+  };
+
+  // ========== 忘記密碼 ==========
+  const handleForgotPassword = async () => {
+    if (!email) return setError('請輸入您註冊時使用的 Email');
+    
+    setLoading(true);
+    setError('');
+    
+    try {
+      const auth = window.firebase.auth();
+      await auth.sendPasswordResetEmail(email);
+      
+      // 成功寄送
+      setMode('forgot-password-success');
+      
+    } catch (e) {
+      console.error('Forgot password error:', e);
+      if (e.code === 'auth/user-not-found') {
+        setError('此 Email 尚未註冊');
+      } else if (e.code === 'auth/invalid-email') {
+        setError('Email 格式不正確');
+      } else {
+        setError('寄送失敗：' + e.message);
       }
     } finally {
       setLoading(false);
@@ -5143,6 +5231,15 @@ const LoginScreen = ({ onLogin }) => {
               )}
             </button>
 
+            <div className="text-center">
+              <button
+                onClick={() => setMode('forgot-password')}
+                className="text-amber-500 text-sm hover:text-amber-400 underline"
+              >
+                忘記密碼？
+              </button>
+            </div>
+
             <div className="relative my-6">
               <div className="absolute inset-0 flex items-center">
                 <div className="w-full border-t border-slate-700"></div>
@@ -5254,6 +5351,187 @@ const LoginScreen = ({ onLogin }) => {
                 className="text-slate-400 text-sm hover:text-white"
               >
                 已有帳號？<span className="text-amber-500 underline">點此登入</span>
+              </button>
+            </div>
+          </div>
+        )}
+
+        {/* ========== Google 註冊新商店 ========== */}
+        {mode === 'google-register' && (
+          <div className="space-y-4 animate-fade-in">
+            <button
+              onClick={() => {
+                window.firebase.auth().signOut();
+                setMode('select');
+              }}
+              className="flex items-center gap-2 text-slate-400 hover:text-white transition-colors"
+            >
+              <ChevronLeft size={20} />
+              返回
+            </button>
+
+            <div className="text-center">
+              <div className="w-16 h-16 bg-white rounded-full flex items-center justify-center mx-auto mb-4">
+                <svg width="32" height="32" viewBox="0 0 24 24">
+                  <path fill="#4285F4" d="M22.56 12.25c0-.78-.07-1.53-.2-2.25H12v4.26h5.92c-.26 1.37-1.04 2.53-2.21 3.31v2.77h3.57c2.08-1.92 3.28-4.74 3.28-8.09z"/>
+                  <path fill="#34A853" d="M12 23c2.97 0 5.46-.98 7.28-2.66l-3.57-2.77c-.98.66-2.23 1.06-3.71 1.06-2.86 0-5.29-1.93-6.16-4.53H2.18v2.84C3.99 20.53 7.7 23 12 23z"/>
+                  <path fill="#FBBC05" d="M5.84 14.09c-.22-.66-.35-1.36-.35-2.09s.13-1.43.35-2.09V7.07H2.18C1.43 8.55 1 10.22 1 12s.43 3.45 1.18 4.93l2.85-2.22.81-.62z"/>
+                  <path fill="#EA4335" d="M12 5.38c1.62 0 3.06.56 4.21 1.64l3.15-3.15C17.45 2.09 14.97 1 12 1 7.7 1 3.99 3.47 2.18 7.07l3.66 2.84c.87-2.6 3.3-4.53 6.16-4.53z"/>
+                </svg>
+              </div>
+              <h2 className="text-white font-bold text-xl">Google 登入成功！</h2>
+              <p className="text-slate-400 text-sm mt-2">
+                歡迎，{email}
+              </p>
+              <p className="text-amber-500 text-xs mt-1">
+                請設定您的商店資訊以完成註冊
+              </p>
+            </div>
+
+            <div className="space-y-3 pt-4">
+              <input
+                type="text"
+                value={shopId}
+                onChange={(e) => setShopId(e.target.value.toLowerCase().replace(/\s/g, '_'))}
+                className="w-full bg-slate-900 border border-slate-700 rounded-xl p-4 text-white outline-none focus:border-amber-500 font-mono"
+                placeholder="商店代碼（例如：my_bar_2024）"
+                autoFocus
+              />
+              <input
+                type="text"
+                value={shopName}
+                onChange={(e) => setShopName(e.target.value)}
+                className="w-full bg-slate-900 border border-slate-700 rounded-xl p-4 text-white outline-none focus:border-amber-500"
+                placeholder="商店名稱（選填）"
+              />
+            </div>
+
+            <div className="bg-blue-900/20 border border-blue-500/30 rounded-xl p-3 text-xs text-blue-200">
+              <Info size={16} className="inline mr-1" />
+              商店代碼設定後無法更改，員工和顧客需要此代碼才能存取。
+            </div>
+
+            {error && <p className="text-rose-500 text-xs text-center">{error}</p>}
+
+            <button
+              onClick={handleGoogleRegister}
+              disabled={loading}
+              className="w-full py-4 bg-gradient-to-r from-blue-600 to-indigo-600 text-white font-bold rounded-xl shadow-lg hover:opacity-90 transition-all active:scale-95 disabled:opacity-50 disabled:cursor-not-allowed flex items-center justify-center gap-2"
+            >
+              {loading ? (
+                <>
+                  <RefreshCcw size={20} className="animate-spin" />
+                  建立中...
+                </>
+              ) : (
+                <>
+                  <Star size={20} />
+                  完成註冊
+                </>
+              )}
+            </button>
+          </div>
+        )}
+
+        {/* ========== 忘記密碼 ========== */}
+        {mode === 'forgot-password' && (
+          <div className="space-y-4 animate-fade-in">
+            <button
+              onClick={() => setMode('owner-login')}
+              className="flex items-center gap-2 text-slate-400 hover:text-white transition-colors"
+            >
+              <ChevronLeft size={20} />
+              返回登入
+            </button>
+
+            <div className="text-center mb-6">
+              <div className="w-16 h-16 bg-amber-900/30 rounded-full flex items-center justify-center mx-auto mb-4">
+                <KeyRound size={32} className="text-amber-500" />
+              </div>
+              <h2 className="text-white font-bold text-xl">重設密碼</h2>
+              <p className="text-slate-400 text-sm mt-2">
+                輸入您註冊時使用的 Email
+              </p>
+            </div>
+
+            <div className="space-y-3">
+              <input
+                type="email"
+                value={email}
+                onChange={(e) => setEmail(e.target.value)}
+                onKeyDown={(e) => e.key === 'Enter' && handleForgotPassword()}
+                className="w-full bg-slate-900 border border-slate-700 rounded-xl p-4 text-white outline-none focus:border-amber-500"
+                placeholder="your-email@example.com"
+                autoComplete="email"
+                autoFocus
+              />
+            </div>
+
+            <div className="bg-blue-900/20 border border-blue-500/30 rounded-xl p-3 text-xs text-blue-200">
+              <Info size={16} className="inline mr-1" />
+              我們會寄送重設密碼的連結到您的信箱，請點擊連結完成密碼更新。
+            </div>
+
+            {error && <p className="text-rose-500 text-xs text-center">{error}</p>}
+
+            <button
+              onClick={handleForgotPassword}
+              disabled={loading}
+              className="w-full py-4 bg-amber-600 text-white font-bold rounded-xl shadow-lg hover:bg-amber-500 transition-all active:scale-95 disabled:opacity-50 disabled:cursor-not-allowed flex items-center justify-center gap-2"
+            >
+              {loading ? (
+                <>
+                  <RefreshCcw size={20} className="animate-spin" />
+                  寄送中...
+                </>
+              ) : (
+                <>
+                  <Check size={20} />
+                  寄送重設連結
+                </>
+              )}
+            </button>
+          </div>
+        )}
+
+        {/* ========== 忘記密碼成功 ========== */}
+        {mode === 'forgot-password-success' && (
+          <div className="space-y-4 animate-fade-in text-center">
+            <div className="w-20 h-20 bg-emerald-900/30 rounded-full flex items-center justify-center mx-auto mb-4">
+              <Check size={40} className="text-emerald-500" />
+            </div>
+
+            <h2 className="text-white font-bold text-2xl">Email 已寄送！</h2>
+            
+            <div className="bg-emerald-900/20 border border-emerald-500/30 rounded-xl p-4 text-sm text-emerald-200">
+              <p className="mb-2">
+                重設密碼的連結已寄送到：
+              </p>
+              <p className="font-bold text-emerald-400">{email}</p>
+            </div>
+
+            <div className="space-y-2 text-xs text-slate-400 pt-4">
+              <p>📧 請檢查您的信箱（包含垃圾郵件匣）</p>
+              <p>🔗 點擊 Email 中的連結重設密碼</p>
+              <p>⏱️ 連結將在 1 小時後失效</p>
+            </div>
+
+            <div className="pt-6 space-y-3">
+              <button
+                onClick={() => setMode('owner-login')}
+                className="w-full py-3 bg-amber-600 text-white font-bold rounded-xl hover:bg-amber-500 transition-all"
+              >
+                返回登入
+              </button>
+              
+              <button
+                onClick={() => {
+                  setMode('forgot-password');
+                  setError('');
+                }}
+                className="w-full py-3 border border-slate-700 text-slate-400 rounded-xl hover:text-white hover:border-slate-500 transition-all"
+              >
+                沒收到？重新寄送
               </button>
             </div>
           </div>
