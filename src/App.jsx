@@ -419,7 +419,7 @@ const safeString = (str) => (str || '').toString();
 // ==========================================
 // ★ 版本號設定 (修改這裡會同步更新登入頁與設定頁)
 // ==========================================
-const APP_VERSION = 'v16.2 (完整修復版)';
+const APP_VERSION = 'v16.3 (完整修復版)';
 const safeNumber = (num) => {
   const n = parseFloat(num);
   return isNaN(n) ? 0 : n;
@@ -4841,12 +4841,14 @@ const LoginScreen = ({ onLogin }) => {
   const [loading, setLoading] = useState(false);
   const [showHelp, setShowHelp] = useState(false);
 
+  // 使用 useRef 來追蹤是否已處理過 redirect（避免重複執行）
+  const hasProcessedRedirect = React.useRef(false);
+  
   // 處理 Google Redirect 回來的結果
   useEffect(() => {
-    let hasRun = false; // 防止重複執行
-    
     const handleRedirectResult = async () => {
-      if (hasRun) {
+      // 雙重檢查：useRef 和 sessionStorage 都檢查
+      if (hasProcessedRedirect.current || sessionStorage.getItem('redirect_processed') === 'true') {
         console.log('[Redirect] 已執行過，跳過');
         return;
       }
@@ -4858,7 +4860,8 @@ const LoginScreen = ({ onLogin }) => {
         return;
       }
       
-      hasRun = true; // 標記已執行
+      hasProcessedRedirect.current = true; // 標記已執行（整個生命週期都有效）
+      sessionStorage.setItem('redirect_processed', 'true'); // 標記已處理（跨渲染有效）
       
       try {
         const auth = window.firebase.auth();
@@ -4940,6 +4943,8 @@ const LoginScreen = ({ onLogin }) => {
         console.error('[Redirect] 錯誤:', e);
         console.error('[Redirect] 錯誤訊息:', e.message);
         console.error('[Redirect] 錯誤代碼:', e.code);
+        // 即使發生錯誤，也不要重試（避免無限循環）
+        // hasProcessedRedirect.current 已經設為 true，不會再重複執行
         setError('登入處理失敗：' + e.message);
         setLoading(false);
       }
@@ -4948,7 +4953,7 @@ const LoginScreen = ({ onLogin }) => {
     // 延遲執行，確保 Firebase 初始化完成
     const timer = setTimeout(handleRedirectResult, 1000);
     return () => clearTimeout(timer);
-  }, [onLogin]); // 加入 onLogin 依賴，確保使用最新的函數引用
+  }, []); // 只執行一次，不依賴任何 state（使用 ref 避免重複執行）
 
   // 店員模式：自動載入店員名單
   useEffect(() => {
@@ -5036,6 +5041,7 @@ const LoginScreen = ({ onLogin }) => {
       console.log('[Google Login] 當前 URL:', window.location.href);
       console.log('[Google Login] 設定 sessionStorage: google_auth_mode = login');
       sessionStorage.setItem('google_auth_mode', 'login');
+      sessionStorage.removeItem('redirect_processed'); // 清除舊的處理標記，允許處理新的 redirect
       console.log('[Google Login] sessionStorage 設定完成');
       console.log('[Google Login] 檢查 sessionStorage:', sessionStorage.getItem('google_auth_mode'));
       
@@ -5072,6 +5078,7 @@ const LoginScreen = ({ onLogin }) => {
       // 使用 Redirect 模式（手機和電腦都適用）
       // 標記這是註冊流程（用 sessionStorage，iOS 跳轉時會保留）
       sessionStorage.setItem('google_auth_mode', 'register');
+      sessionStorage.removeItem('redirect_processed'); // 清除舊的處理標記，允許處理新的 redirect
       
       // 跳轉到 Google 驗證（之後的程式碼不會執行）
       await auth.signInWithRedirect(provider);
