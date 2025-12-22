@@ -418,7 +418,7 @@ const safeString = (str) => (str || '').toString();
 // ==========================================
 // ★ 版本號設定 (修改這裡會同步更新登入頁與設定頁)
 // ==========================================
-const APP_VERSION = 'v16.5';
+const APP_VERSION = 'v16.5 (完整修復版)';
 const safeNumber = (num) => {
   const n = parseFloat(num);
   return isNaN(n) ? 0 : n;
@@ -681,7 +681,7 @@ const LoginHelpModal = ({ isOpen, onClose }) => {
               <Lock size={16} className="text-emerald-500" />
               <strong className="text-emerald-500 text-xs">安全性提升</strong>
             </div>
-            <p className="text-xs text-emerald-200">使用 Firebase Authentication，您的帳號更安全，且支援「忘記密碼」功能！</p>
+            <p className="text-xs text-emerald-200">帳號採用加密驗證，支援「忘記密碼」功能，更安全可靠！</p>
           </div>
         </div>
         
