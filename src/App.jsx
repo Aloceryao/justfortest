@@ -419,7 +419,7 @@ const safeString = (str) => (str || '').toString();
 // ==========================================
 // ★ 版本號設定 (修改這裡會同步更新登入頁與設定頁)
 // ==========================================
-const APP_VERSION = 'v16.10.3 (登入測試完整版)';
+const APP_VERSION = 'v16.10.4 (登入測試完整版)';
 const safeNumber = (num) => {
   const n = parseFloat(num);
   return isNaN(n) ? 0 : n;
@@ -6856,11 +6856,12 @@ const handleUpdateGridCategory = (updatedCat) => {
     });
   };
 
-  // 修改後的 startEdit：自動補 ID + 自動命名 + 補齊預設欄位
+  // --- 修正後的 startEdit ---
   const startEdit = (mode, item) => {
     setEditorMode(mode);
 
     if (item) {
+      // 編輯現有項目
       if (!item.id) {
         const draftCount = recipes.filter(
           (r) => r.nameZh && r.nameZh.startsWith('草稿')
@@ -6874,12 +6875,30 @@ const handleUpdateGridCategory = (updatedCat) => {
           type: item.type || 'classic',
           tags: item.tags || [],
           ingredients: item.ingredients || [],
+          // ★ 修正：補上預設值，防止 undefined
+          baseSpirit: item.baseSpirit || '', 
+          steps: item.steps || '',
+          garnish: item.garnish || '',
+          flavorDescription: item.flavorDescription || '',
+          technique: item.technique || 'Stir',
+          glass: item.glass || 'Martini',
         });
       } else {
-        setEditingItem(item);
+        // ★ 編輯既有項目時也要補齊欄位
+        setEditingItem({
+          ...item,
+          baseSpirit: item.baseSpirit || '',
+          steps: item.steps || '',
+          garnish: item.garnish || '',
+          flavorDescription: item.flavorDescription || '',
+          technique: item.technique || 'Stir',
+          glass: item.glass || 'Martini',
+        });
       }
     } else {
+      // 新增全新項目
       const newItem = { id: generateId(), nameZh: '' };
+      
       if (mode === 'recipe') {
         Object.assign(newItem, {
           ingredients: [],
@@ -6887,6 +6906,14 @@ const handleUpdateGridCategory = (updatedCat) => {
           targetCostRate: '',
           price: '',
           tags: [],
+          // ★ 修正：初始化所有欄位
+          baseSpirit: '', 
+          technique: 'Stir',
+          glass: 'Martini',
+          steps: '',
+          garnish: '',
+          flavorDescription: '',
+          image: '',
         });
       } else if (mode === 'food') {
         Object.assign(newItem, {
@@ -6895,6 +6922,8 @@ const handleUpdateGridCategory = (updatedCat) => {
           flavorDescription: '',
           image: '',
           category: '',
+          // ★ 修正：餐點也需要 steps
+          steps: '', 
         });
       } else {
         Object.assign(newItem, {
@@ -6902,13 +6931,20 @@ const handleUpdateGridCategory = (updatedCat) => {
           price: 0,
           volume: 700,
           subType: '',
+          abv: 0,
         });
       }
       setEditingItem(newItem);
     }
   };
 
+  // --- 修正後的 saveItem (加上防呆與錯誤捕捉) ---
   const saveItem = async (item, mode) => {
+    if (!window.firebase) {
+      alert('資料庫連線異常，請重新整理頁面');
+      return;
+    }
+
     const db = window.firebase.firestore();
     const col =
       mode === 'recipe'
@@ -6917,6 +6953,7 @@ const handleUpdateGridCategory = (updatedCat) => {
         ? 'foods'
         : 'ingredients';
 
+    // ★ 關鍵修正：將所有可能為 undefined 的欄位轉為空字串
     const cleanItem = {
       ...item,
       price: Number(item.price) || 0,
@@ -6927,18 +6964,40 @@ const handleUpdateGridCategory = (updatedCat) => {
       priceShot: Number(item.priceShot) || 0,
       priceGlass: Number(item.priceGlass) || 0,
       priceBottle: Number(item.priceBottle) || 0,
+      
+      // 強制轉換文字欄位
+      nameZh: item.nameZh || '',
+      nameEn: item.nameEn || '',
+      baseSpirit: item.baseSpirit || '',
+      subType: item.subType || '',
+      category: item.category || '',
+      flavorDescription: item.flavorDescription || '',
+      steps: item.steps || '',
+      garnish: item.garnish || '',
+      image: item.image || '',
+      technique: item.technique || '',
+      glass: item.glass || '',
     };
 
-    if (cleanItem.image && cleanItem.image.startsWith('data:')) {
-      await ImageDB.save(cleanItem.id, cleanItem.image);
+    try {
+      if (cleanItem.image && cleanItem.image.startsWith('data:')) {
+        await ImageDB.save(cleanItem.id, cleanItem.image);
+      }
+      
+      await db
+        .collection('shops')
+        .doc(shopId)
+        .collection(col)
+        .doc(cleanItem.id)
+        .set(cleanItem);
+      
+      // 成功後關閉視窗
+      setEditorMode(null);
+      
+    } catch (error) {
+      console.error('Save Error:', error);
+      alert(`存檔失敗：${error.message}\n請截圖告知管理員`);
     }
-    await db
-      .collection('shops')
-      .doc(shopId)
-      .collection(col)
-      .doc(cleanItem.id)
-      .set(cleanItem);
-    setEditorMode(null);
   };
 
   console.log('[App Render] isLoggedIn:', isLoggedIn);
