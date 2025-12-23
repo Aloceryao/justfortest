@@ -424,7 +424,7 @@ const safeString = (str) => (str || '').toString();
 // ==========================================
 // ★ 版本號設定 (修改這裡會同步更新登入頁與設定頁)
 // ==========================================
-const APP_VERSION = 'v17.1(登入測試完整版)';
+const APP_VERSION = 'v17.2 (登入測試完整版)';
 // ==========================================
 // Auth Feature Flag
 // ==========================================
@@ -470,7 +470,10 @@ const migrateStorage = (newKey, legacyKeys = []) => {
 
 const normalizeGridCatsByTab = (raw, defaultList = []) => {
   const cloneList = (list) =>
-    (Array.isArray(list) ? list : []).filter(Boolean).map((x) => ({ ...x }));
+    (Array.isArray(list) ? list : [])
+      .filter(Boolean)
+      // 確保每個方塊都有穩定 id，避免刪除/更新無法比對
+      .map((x) => ({ ...x, id: x?.id || generateId() }));
 
   // 舊版：單一 array → 複製成三份
   if (Array.isArray(raw)) {
@@ -6304,11 +6307,13 @@ function MainAppContent() {
   }, [gridCategoriesByTab]);
 
   const saveGridToCloud = (newByTab) => {
-    setGridCategoriesByTab(newByTab);
-    localStorage.setItem(STORAGE_KEYS.gridCatsByTab, JSON.stringify(newByTab));
+    // 再保險一次：寫入前補齊 id
+    const normalized = normalizeGridCatsByTab(newByTab, DEFAULT_GRID_CATS);
+    setGridCategoriesByTab(normalized);
+    localStorage.setItem(STORAGE_KEYS.gridCatsByTab, JSON.stringify(normalized));
 
     // 舊版相容欄位：categories
-    const legacyArray = newByTab?.classic || [];
+    const legacyArray = normalized?.classic || [];
     localStorage.setItem(STORAGE_KEYS.gridCats, JSON.stringify(legacyArray));
     localStorage.setItem('bar_grid_cats_v9', JSON.stringify(legacyArray));
 
@@ -6319,7 +6324,7 @@ function MainAppContent() {
         .doc(shopId)
         .collection('settings')
         .doc('grid_config')
-        .set({ categoriesByTab: newByTab, categories: legacyArray }, { merge: true })
+        .set({ categoriesByTab: normalized, categories: legacyArray }, { merge: true })
         .catch((err) => console.error('方塊同步失敗:', err));
     }
   };
