@@ -133,6 +133,7 @@ const compressImage = (base64Str, maxWidth = 1920, quality = 0.95) => {
       canvas.width = width;
       canvas.height = height;
       const ctx = canvas.getContext('2d');
+      if (!ctx) return resolve(base64Str);
       // ★ 關鍵：加入這兩行優化渲染品質
       ctx.imageSmoothingEnabled = true;
       ctx.imageSmoothingQuality = 'high'; 
@@ -211,7 +212,11 @@ const useImageLoader = (imageId) => {
       setSrc(null);
       return;
     }
-    if (imageId.startsWith('data:') || imageId.startsWith('http')) {
+    // 防止非字串型別資料導致 startsWith 當機
+    if (
+      typeof imageId === 'string' &&
+      (imageId.startsWith('data:') || imageId.startsWith('http'))
+    ) {
       setSrc(imageId);
       return;
     }
@@ -419,7 +424,7 @@ const safeString = (str) => (str || '').toString();
 // ==========================================
 // ★ 版本號設定 (修改這裡會同步更新登入頁與設定頁)
 // ==========================================
-const APP_VERSION = 'v16.10.7 (登入測試完整版)';
+const APP_VERSION = 'v16.10.711 (登入測試完整版)';
 const safeNumber = (num) => {
   const n = parseFloat(num);
   return isNaN(n) ? 0 : n;
@@ -1285,7 +1290,7 @@ const CategoryEditModal = ({
 // ★ 補回遺失的 CategoryGrid 元件
 // ==========================================
 const CategoryGrid = ({
-  categories,
+  categories = [],
   onSelect,
   onAdd,
   onDelete,
@@ -1316,12 +1321,15 @@ const CategoryGrid = ({
       </div>
       <div className="grid grid-cols-2 gap-3">
         {categories.map((cat, idx) => {
-          const styleObj = cat.gradient.startsWith('#')
-            ? { backgroundColor: cat.gradient }
+          if (!cat) return null;
+
+          const gradient = safeString(cat.gradient) || 'from-slate-700 to-slate-800';
+          const styleObj = gradient.startsWith('#')
+            ? { backgroundColor: gradient }
             : {};
-          const classStr = cat.gradient.startsWith('#')
+          const classStr = gradient.startsWith('#')
             ? ''
-            : `bg-gradient-to-br ${cat.gradient}`;
+            : `bg-gradient-to-br ${gradient}`;
 
           return (
             <div
@@ -1974,7 +1982,7 @@ const syncToCloud = (newSections) => {
           return {
             ...s,
             subgroups: [
-              ...s.subgroups,
+              ...(s.subgroups || []),
               {
                 id: generateId(),
                 title: newSubgroupTitle.trim(),
@@ -1999,7 +2007,7 @@ const syncToCloud = (newSections) => {
         if (s.id === sectionId) {
           return {
             ...s,
-            subgroups: s.subgroups.filter((sg) => sg.id !== subgroupId),
+            subgroups: (s.subgroups || []).filter((sg) => sg.id !== subgroupId),
           };
         }
         return s;
@@ -2011,12 +2019,12 @@ const syncToCloud = (newSections) => {
   const handleAddRecipeToSubgroup = (recipeId) => {
     const updatedSections = sections.map((s) => {
       if (s.id === activeSectionId) {
-        const updatedSubgroups = s.subgroups.map((sg) => {
+        const updatedSubgroups = (s.subgroups || []).map((sg) => {
           if (
             sg.id === pickingForSubgroupId &&
-            !sg.recipeIds.includes(recipeId)
+            !((sg.recipeIds || []).includes(recipeId))
           ) {
-            return { ...sg, recipeIds: [...sg.recipeIds, recipeId] };
+            return { ...sg, recipeIds: [...(sg.recipeIds || []), recipeId] };
           }
           return sg;
         });
@@ -2031,11 +2039,11 @@ const syncToCloud = (newSections) => {
   const handleRemoveRecipeFromSubgroup = (subgroupId, recipeId) => {
     const updatedSections = sections.map((s) => {
       if (s.id === activeSectionId) {
-        const updatedSubgroups = s.subgroups.map((sg) => {
+        const updatedSubgroups = (s.subgroups || []).map((sg) => {
           if (sg.id === subgroupId) {
             return {
               ...sg,
-              recipeIds: sg.recipeIds.filter((id) => id !== recipeId),
+              recipeIds: (sg.recipeIds || []).filter((id) => id !== recipeId),
             };
           }
           return sg;
@@ -2049,10 +2057,12 @@ const syncToCloud = (newSections) => {
 
   const activeSection = sections.find((s) => s.id === activeSectionId);
 
-  if (activeSectionId && !activeSection) {
-    setActiveSectionId(null);
-    return null;
-  }
+  // 避免在 render 階段 setState（React 反模式）；資料同步延遲/刪除時改用 effect 修正狀態
+  useEffect(() => {
+    if (activeSectionId && !activeSection) {
+      setActiveSectionId(null);
+    }
+  }, [activeSectionId, activeSection]);
 
   // --- 專區列表模式 (第一層) ---
   if (!activeSectionId) {
@@ -2271,7 +2281,7 @@ const syncToCloud = (newSections) => {
         )}
         
         <div className="space-y-8">
-          {activeSection.subgroups.map((subgroup) => (
+          {(activeSection?.subgroups || []).map((subgroup) => (
             <div key={subgroup.id} className="space-y-3 relative">
               <div className="border-b border-slate-800 pb-2">
                 <div className="flex justify-between items-center">
@@ -3383,6 +3393,7 @@ const EditorSheet = ({
         canvas.width = width;
         canvas.height = height;
         const ctx = canvas.getContext('2d');
+        if (!ctx) return;
         ctx.imageSmoothingEnabled = true;
         ctx.imageSmoothingQuality = 'high';
         ctx.drawImage(img, 0, 0, width, height);
