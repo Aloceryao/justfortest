@@ -419,7 +419,7 @@ const safeString = (str) => (str || '').toString();
 // ==========================================
 // ★ 版本號設定 (修改這裡會同步更新登入頁與設定頁)
 // ==========================================
-const APP_VERSION = 'v16.10.86 (批量增加測試版)';
+const APP_VERSION = 'v16.10.87 (批量增加測試版)';
 const safeNumber = (num) => {
   const n = parseFloat(num);
   return isNaN(n) ? 0 : n;
@@ -4859,96 +4859,114 @@ const LoginScreen = ({ onLogin }) => {
   const [loading, setLoading] = useState(false);
   const [showHelp, setShowHelp] = useState(false);
 
-// 處理 Google Redirect 回來的結果 (回歸官方標準版)
+// 處理 Google Redirect 回來的結果 (最終防禦版：死等 5 秒)
 const hasProcessedRedirect = React.useRef(false);
   
 useEffect(() => {
-  // 1. 如果 Firebase 根本還沒載入，設個計時器重試 (這是唯一的等待邏輯)
-  if (!window.firebase) {
-    const retryTimer = setTimeout(() => {
-       // 這裡不做複雜操作，只是觸發重新渲染或簡單重試，
-       // 但為了避免死迴圈，我們依賴 React 的重繪機制，
-       // 如果您的 APP 結構正確，這裡通常不需要寫太多，
-       // 但為了保險，我們僅在 Firebase 存在時才執行後續。
-    }, 500);
-    return () => clearTimeout(retryTimer);
-  }
+  // 1. 檢查是否有標記
+  const authMode = localStorage.getItem('google_auth_mode');
+  if (!authMode) return; 
 
-  const auth = window.firebase.auth();
-  const db = window.firebase.firestore();
+  // 有標記，立刻鎖住畫面轉圈圈
+  setLoading(true);
 
-  // 檢查是否有「登入中」的標記 (只為了顯示 Loading 用)
-  const isRedirecting = localStorage.getItem('google_auth_mode');
-  if (isRedirecting) {
-    setLoading(true); // 只要有標記，就先鎖住畫面轉圈圈
-  }
-
-  // ★ 核心修改：直接呼叫 getRedirectResult，並「等待」它完成
-  // 不管 Firebase 初始化多久，這個 Promise 會一直等到有結果才執行 .then
-  auth.getRedirectResult()
-    .then(async (result) => {
-      // --- 情況 A: 真的抓到使用者了 (登入成功) ---
-      if (result.user) {
-        localStorage.removeItem('google_auth_mode'); // 清除標記
-        
-        const userId = result.user.uid;
-        const userEmail = result.user.email;
-        
-        // 讀取資料庫
-        const userDoc = await db.collection('users').doc(userId).get();
-        
-        if (isRedirecting === 'login' || !isRedirecting) { // 預設視為登入
-           if (!userDoc.exists || !userDoc.data().shopId) {
-              await auth.signOut();
-              alert('登入失敗：此帳號尚未註冊。');
-              setLoading(false);
-           } else {
-              onLogin(userDoc.data().shopId, 'owner');
-           }
-        } else if (isRedirecting === 'register') {
-           if (userDoc.exists && userDoc.data().shopId) {
-              await auth.signOut();
-              alert('此帳號已註冊過，請直接登入');
-              setLoading(false);
-           } else {
-              setEmail(userEmail);
-              setMode('google-register');
-              setLoading(false);
-           }
-        }
-        return;
+  // 設定一個 8 秒的強制保險絲，萬一真的都沒反應，8 秒後自動解鎖，避免永久卡死
+  const safetyTimer = setTimeout(() => {
+      const stillWaiting = localStorage.getItem('google_auth_mode');
+      if (stillWaiting) {
+          console.log('等太久了，自動解除鎖定');
+          setLoading(false);
+          localStorage.removeItem('google_auth_mode');
       }
+  }, 8000);
 
-      // --- 情況 B: 沒抓到 Redirect 結果 (可能是單純重新整理，或已登入) ---
-      // 這時候再檢查一次 currentUser (以此作為雙重保險)
-      if (auth.currentUser) {
-         const userId = auth.currentUser.uid;
-         const userDoc = await db.collection('users').doc(userId).get();
-         if (userDoc.exists && userDoc.data().shopId) {
-            localStorage.removeItem('google_auth_mode');
-            onLogin(userDoc.data().shopId, 'owner');
-            return;
-         }
-      }
+  const checkLoginStatus = () => {
+    // 如果 Firebase 還沒載入，每 0.5 秒問一次
+    if (!window.firebase || !window.firebase.auth) {
+      setTimeout(checkLoginStatus, 500);
+      return;
+    }
 
-      // --- 情況 C: 真的沒人登入 ---
-      // 只有確認真的沒人，才把 Loading 關掉
-      if (isRedirecting) {
-         // 如果有標記卻沒抓到人，可能是跳轉失敗或被中斷
-         console.log('Redirect 回來但沒抓到使用者');
-         setLoading(false);
-         localStorage.removeItem('google_auth_mode');
-      }
+    const auth = window.firebase.auth();
+    
+    // 使用 getRedirectResult 來抓取結果
+    auth.getRedirectResult()
+      .then(async (result) => {
+          // --- 情況 A: 抓到了！ ---
+          if (result.user) {
+              // 清除保險絲
+              clearTimeout(safetyTimer);
+              localStorage.removeItem('google_auth_mode');
+              
+              const userId = result.user.uid;
+              const userEmail = result.user.email;
+              const db = window.firebase.firestore();
+              
+              // 這裡稍微等一下 Firestore，避免連線還沒建立
+              try {
+                  const userDoc = await db.collection('users').doc(userId).get();
+                  
+                  if (authMode === 'login' || !authMode) {
+                      if (!userDoc.exists || !userDoc.data().shopId) {
+                          await auth.signOut();
+                          alert('登入失敗：此帳號尚未註冊');
+                          setLoading(false);
+                      } else {
+                          onLogin(userDoc.data().shopId, 'owner');
+                      }
+                  } else if (authMode === 'register') {
+                      if (userDoc.exists && userDoc.data().shopId) {
+                          await auth.signOut();
+                          alert('此帳號已註冊，請登入');
+                          setLoading(false);
+                      } else {
+                          setEmail(userEmail);
+                          setMode('google-register');
+                          setLoading(false);
+                      }
+                  }
+              } catch (err) {
+                  alert('讀取資料失敗：' + err.message);
+                  setLoading(false);
+              }
+              return;
+          }
 
-    })
-    .catch((error) => {
-      // --- 情況 D: 發生錯誤 ---
-      console.error('Redirect Error:', error);
-      alert('登入錯誤：' + error.message);
-      setLoading(false);
-      localStorage.removeItem('google_auth_mode');
-    });
+          // --- 情況 B: 沒抓到 redirect 結果 ---
+          // 這時候不要急著放棄！再檢查一次 currentUser
+          if (auth.currentUser) {
+              clearTimeout(safetyTimer);
+              localStorage.removeItem('google_auth_mode');
+              
+              const userId = auth.currentUser.uid;
+              const db = window.firebase.firestore();
+              const userDoc = await db.collection('users').doc(userId).get();
+              if (userDoc.exists && userDoc.data().shopId) {
+                  onLogin(userDoc.data().shopId, 'owner');
+              } else {
+                  setLoading(false); // 有登入但沒資料
+              }
+              return;
+          }
 
+          // --- 情況 C: 真的什麼都沒有 ---
+          // 注意：我們不在這裡 setLoading(false)，讓 safetyTimer 去關閉
+          // 因為有時候 Safari 會慢半拍才吐出 currentUser
+          console.log('目前沒抓到人，繼續等待...');
+      })
+      .catch((error) => {
+          clearTimeout(safetyTimer);
+          console.error(error);
+          alert('登入錯誤：' + error.message);
+          setLoading(false);
+          localStorage.removeItem('google_auth_mode');
+      });
+  };
+
+  checkLoginStatus();
+  
+  // 組件卸載時清除計時器
+  return () => clearTimeout(safetyTimer);
 }, []);
 
   // 店員模式：自動載入店員名單
