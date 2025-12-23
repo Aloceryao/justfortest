@@ -419,7 +419,7 @@ const safeString = (str) => (str || '').toString();
 // ==========================================
 // ★ 版本號設定 (修改這裡會同步更新登入頁與設定頁)
 // ==========================================
-const APP_VERSION = 'v16.10.82 (批量增加測試版)';
+const APP_VERSION = 'v16.10.83 (批量增加測試版)';
 const safeNumber = (num) => {
   const n = parseFloat(num);
   return isNaN(n) ? 0 : n;
@@ -4859,47 +4859,61 @@ const LoginScreen = ({ onLogin }) => {
   const [loading, setLoading] = useState(false);
   const [showHelp, setShowHelp] = useState(false);
 
-// 處理 Google Redirect 回來的結果 (強效除錯版)
+// 處理 Google Redirect 回來的結果 (修正版：自動等待 Firebase 載入)
 const hasProcessedRedirect = React.useRef(false);
   
 useEffect(() => {
-  const handleRedirectResult = async () => {
-    // 1. 基本檢查
-    if (hasProcessedRedirect.current || !window.firebase) return;
+  // 定義一個會「自我重試」的檢查函式
+  const checkRedirectResult = async () => {
     
-    // ★ 改用 localStorage 檢查標記 (比較不會被手機清除)
+    // 1. ★ 關鍵修正：如果 Firebase 還沒載入，就等 0.5 秒後再呼叫自己一次
+    // 這能解決手機網速慢導致的「沒反應」問題
+    if (!window.firebase || !window.firebase.auth) {
+      console.log('Firebase 尚未載入，等待中...');
+      return setTimeout(checkRedirectResult, 500);
+    }
+
+    // 2. 避免重複執行
+    if (hasProcessedRedirect.current) return;
+
+    // 3. 檢查是否有「正在登入中」的標記 (localStorage)
     const authMode = localStorage.getItem('google_auth_mode');
-    
-    // 如果沒有標記，代表不是登入回來的，安靜結束
-    if (!authMode) return; 
+    if (!authMode) return; // 沒標記 = 普通重新整理，不做事
 
-    // 只要有標記，就彈窗告訴我們「我準備開始檢查了」
-    // alert('系統：偵測到 Google 登入返回，開始處理...');
-
+    // 標記已處理，避免迴圈
     hasProcessedRedirect.current = true;
-    
+
     try {
       const auth = window.firebase.auth();
+      
+      // 取得 Google 回傳的結果
       const result = await auth.getRedirectResult();
       
+      // 特殊情況：有時候 result 是空，但 currentUser 已經登入了
+      // 我們補上這個檢查，讓登入更穩
       if (!result.user) {
-        // alert('系統：沒有抓到使用者資料 (可能是第一次載入)');
-        // 注意：不要在這裡清除標記，給它一點時間
-        return;
+          if (auth.currentUser) {
+              // 已經登入了，直接處理
+              const userId = auth.currentUser.uid;
+              const db = window.firebase.firestore();
+              const userDoc = await db.collection('users').doc(userId).get();
+              
+              if (userDoc.exists && userDoc.data().shopId) {
+                  localStorage.removeItem('google_auth_mode');
+                  onLogin(userDoc.data().shopId, 'owner');
+              }
+          }
+          return;
       }
-      
-      // alert(`系統：抓到使用者了！Email: ${result.user.email}`);
-      
-      // --- 登入成功，開始處理資料 ---
+
+      // --- 正常抓到資料 ---
       const userId = result.user.uid;
       const userEmail = result.user.email;
-      
-      // 清除標記 (任務完成)
-      localStorage.removeItem('google_auth_mode'); 
-      
+      localStorage.removeItem('google_auth_mode'); // 任務完成，清除標記
+
       const db = window.firebase.firestore();
       const userDoc = await db.collection('users').doc(userId).get();
-      
+
       if (authMode === 'login') {
         if (!userDoc.exists || !userDoc.data().shopId) {
           await auth.signOut();
@@ -4908,9 +4922,7 @@ useEffect(() => {
           setLoading(false);
           return;
         }
-        const userShopId = userDoc.data().shopId;
-        // alert(`準備登入商店: ${userShopId}`);
-        onLogin(userShopId, 'owner'); // 執行登入
+        onLogin(userDoc.data().shopId, 'owner');
         
       } else if (authMode === 'register') {
         if (userDoc.exists && userDoc.data().shopId) {
@@ -4933,9 +4945,8 @@ useEffect(() => {
     }
   };
   
-  // 延遲執行，確保 Firebase 載入
-  const timer = setTimeout(handleRedirectResult, 1000);
-  return () => clearTimeout(timer);
+  // 啟動檢查
+  checkRedirectResult();
 }, []);
 
   // 店員模式：自動載入店員名單
