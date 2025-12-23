@@ -419,7 +419,7 @@ const safeString = (str) => (str || '').toString();
 // ==========================================
 // ★ 版本號設定 (修改這裡會同步更新登入頁與設定頁)
 // ==========================================
-const APP_VERSION = 'v16.10.6 (登入測試完整版)';
+const APP_VERSION = 'v16.10.7 (登入測試完整版)';
 const safeNumber = (num) => {
   const n = parseFloat(num);
   return isNaN(n) ? 0 : n;
@@ -4859,73 +4859,81 @@ const LoginScreen = ({ onLogin }) => {
   const [loading, setLoading] = useState(false);
   const [showHelp, setShowHelp] = useState(false);
 
-  // 處理 Google Redirect 回來的結果（備用，現在主要使用 Popup 模式）
-  const hasProcessedRedirect = React.useRef(false);
+// 處理 Google Redirect 回來的結果
+const hasProcessedRedirect = React.useRef(false);
   
-  useEffect(() => {
-    const handleRedirectResult = async () => {
-      if (hasProcessedRedirect.current || !window.firebase) {
+useEffect(() => {
+  const handleRedirectResult = async () => {
+    // 1. 如果 Firebase 還沒載入，或是已經處理過，就跳過
+    if (hasProcessedRedirect.current || !window.firebase) return;
+    
+    // 2. ★ 防護機制：如果根本沒有「Google 登入流程」的標記，就直接結束
+    // 這能有效防止 Safari 在重新整理頁面時誤判，造成無限轉圈
+    const authMode = sessionStorage.getItem('google_auth_mode');
+    if (!authMode) return; 
+
+    hasProcessedRedirect.current = true;
+    
+    try {
+      const auth = window.firebase.auth();
+      
+      // 檢查是否已經有登入的人 (避免重複登入導致的迴圈)
+      if (auth.currentUser) {
+           console.log('偵測到已登入用戶，停止 Redirect 檢查');
+           return;
+      }
+
+      const result = await auth.getRedirectResult();
+      
+      if (!result.user) {
+        sessionStorage.removeItem('google_auth_mode'); // 清理標記
         return;
       }
       
-      hasProcessedRedirect.current = true;
+      // ... (以下是原本的登入邏輯) ...
+      const userId = result.user.uid;
+      const userEmail = result.user.email;
+      sessionStorage.removeItem('google_auth_mode'); // 用完即丟
       
-      try {
-        const auth = window.firebase.auth();
-        const result = await auth.getRedirectResult();
-        
-        if (!result.user) {
-          // 清理可能殘留的 sessionStorage
-          if (sessionStorage.getItem('google_auth_mode')) {
-            sessionStorage.removeItem('google_auth_mode');
-          }
+      const db = window.firebase.firestore();
+      const userDoc = await db.collection('users').doc(userId).get();
+      
+      if (authMode === 'login') {
+        if (!userDoc.exists || !userDoc.data().shopId) {
+          await auth.signOut();
+          setError('此 Google 帳號尚未註冊。請點擊下方「註冊新商店」進行註冊');
+          setMode('select');
+          setLoading(false);
           return;
         }
+        const userShopId = userDoc.data().shopId;
+        onLogin(userShopId, 'owner');
         
-        const userId = result.user.uid;
-        const userEmail = result.user.email;
-        const authMode = sessionStorage.getItem('google_auth_mode') || 'login';
-        sessionStorage.removeItem('google_auth_mode');
-        
-        const db = window.firebase.firestore();
-        const userDoc = await db.collection('users').doc(userId).get();
-        
-        if (authMode === 'login') {
-          if (!userDoc.exists || !userDoc.data().shopId) {
-            await auth.signOut();
-            setError('此 Google 帳號尚未註冊。請點擊下方「註冊新商店」進行註冊');
-            setMode('select');
-            setLoading(false);
-            return;
-          }
-          
-          const userShopId = userDoc.data().shopId;
-          onLogin(userShopId, 'owner');
-          
-        } else if (authMode === 'register') {
-          if (userDoc.exists && userDoc.data().shopId) {
-            await auth.signOut();
-            setError('此 Google 帳號已註冊。請返回登入頁面進行登入');
-            setMode('select');
-            setLoading(false);
-            return;
-          }
-          
-          setEmail(userEmail);
-          setMode('google-register');
+      } else if (authMode === 'register') {
+        if (userDoc.exists && userDoc.data().shopId) {
+          await auth.signOut();
+          setError('此 Google 帳號已註冊。請返回登入頁面進行登入');
+          setMode('select');
           setLoading(false);
+          return;
         }
-        
-      } catch (e) {
-        console.error('Redirect 處理錯誤:', e);
-        setError('登入處理失敗：' + e.message);
+        setEmail(userEmail);
+        setMode('google-register');
         setLoading(false);
       }
-    };
-    
-    const timer = setTimeout(handleRedirectResult, 1000);
-    return () => clearTimeout(timer);
-  }, []);
+      
+    } catch (e) {
+      console.error('Redirect 處理錯誤:', e);
+      setError('登入處理失敗：' + e.message);
+      setLoading(false);
+      sessionStorage.removeItem('google_auth_mode'); // 出錯也要清理
+    }
+  };
+  
+  // 稍微延遲執行，讓 Firebase SDK 有時間初始化
+  const timer = setTimeout(handleRedirectResult, 1000);
+  return () => clearTimeout(timer);
+}, []);
 
   // 店員模式：自動載入店員名單
   useEffect(() => {
@@ -6435,28 +6443,43 @@ function MainAppContent() {
     console.log('[handleLogin] 下一次渲染應該會進入主畫面');
   };
 
-  const handleLogout = () => {
-    console.log('[handleLogout] 開始登出');
-    setIsLoggedIn(false);
-    localStorage.removeItem('bar_user_role');
-    localStorage.removeItem('bar_shop_id');
-    setShopId('');
-    setIngredients([]);
-    setRecipes([]);
-    setFoodItems([]);
-    setStaffList([]);
-    console.log('[handleLogout] localStorage 已清除');
-    if (window.history.pushState) {
-      const newurl =
-        window.location.protocol +
-        '//' +
-        window.location.host +
-        window.location.pathname;
-      window.history.pushState({ path: newurl }, '', newurl);
+// --- 修正後的 handleLogout (強制清除 Google 登入狀態) ---
+const handleLogout = async () => {
+  console.log('[handleLogout] 開始登出');
+  
+  // 1. 強制 Firebase 登出 (這行最重要，能解決 Safari 卡住問題)
+  if (window.firebase) {
+    try {
+      await window.firebase.auth().signOut();
+      console.log('[handleLogout] Firebase 已登出');
+    } catch (e) {
+      console.error('Firebase 登出警告:', e);
     }
-    console.log('[handleLogout] 登出完成');
-  };
+  }
 
+  // 2. 清除 App 內部狀態
+  setIsLoggedIn(false);
+  localStorage.removeItem('bar_user_role');
+  localStorage.removeItem('bar_shop_id');
+  
+  // 3. 清除 Google 登入的暫存標記 (關鍵步驟)
+  sessionStorage.removeItem('google_auth_mode'); 
+  localStorage.removeItem('google_login_debug');
+
+  setShopId('');
+  setIngredients([]);
+  setRecipes([]);
+  setFoodItems([]);
+  setStaffList([]);
+  
+  // 4. 清除網址列參數 (讓網址變乾淨)
+  if (window.history.pushState) {
+    const newurl = window.location.protocol + '//' + window.location.host + window.location.pathname;
+    window.history.pushState({ path: newurl }, '', newurl);
+  }
+  
+  console.log('[handleLogout] 登出完成');
+};
   const closeDialog = () => setDialog({ ...dialog, isOpen: false });
   const showConfirm = (title, message, onConfirm) =>
     setDialog({ isOpen: true, type: 'confirm', title, message, onConfirm });
