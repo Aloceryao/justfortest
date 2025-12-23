@@ -424,7 +424,7 @@ const safeString = (str) => (str || '').toString();
 // ==========================================
 // ★ 版本號設定 (修改這裡會同步更新登入頁與設定頁)
 // ==========================================
-const APP_VERSION = 'v17.2 (登入測試完整版)';
+const APP_VERSION = 'v17.3 (完整版測試)';
 // ==========================================
 // Auth Feature Flag
 // ==========================================
@@ -2925,16 +2925,41 @@ const IngredientPickerModal = ({
   onSelect,
   ingredients = [], // ★ 修正 1: 加上預設值，防止 undefined
   categories,
+  categorySubItems,
   availableBases,
 }) => {
   const [searchTerm, setSearchTerm] = useState('');
-  const [filterType, setFilterType] = useState('all');
+  // 兩層篩選：大分類(type) + 小分類(subType)
+  const [mainType, setMainType] = useState('all');
+  const [subType, setSubType] = useState('all');
 
   // 如果沒開，或者 onSelect 函式遺失，就不渲染
   if (!isOpen) return null;
 
   // ★ 修正 2: 這裡加上安全檢查，確保 ingredients 是陣列
   const safeIngredients = Array.isArray(ingredients) ? ingredients : [];
+
+  const safeCategories = Array.isArray(categories) ? categories : [];
+
+  const subTypeOptions = useMemo(() => {
+    if (mainType === 'all') return [];
+    // 優先使用外部傳入的子分類設定（更符合你在材料庫設定的結果）
+    const fromConfig =
+      categorySubItems && categorySubItems[mainType]
+        ? categorySubItems[mainType]
+        : null;
+    if (Array.isArray(fromConfig) && fromConfig.length > 0) return fromConfig;
+
+    // fallback：從材料資料推導
+    const set = new Set();
+    safeIngredients.forEach((ing) => {
+      if (!ing) return;
+      if (ing.type !== mainType) return;
+      const st = safeString(ing.subType).trim();
+      if (st) set.add(st);
+    });
+    return [...set];
+  }, [mainType, categorySubItems, safeIngredients]);
 
   const filtered = safeIngredients.filter((ing) => {
     // ★ 修正 3: 防止資料庫有壞掉的空資料 (null)
@@ -2944,15 +2969,11 @@ const IngredientPickerModal = ({
       safeString(ing.nameZh).includes(searchTerm) ||
       safeString(ing.nameEn).toLowerCase().includes(searchTerm.toLowerCase());
 
-    let matchType = true;
-    if (filterType !== 'all') {
-      if (filterType === 'alcohol') matchType = ing.type === 'alcohol';
-      else if (filterType === 'soft') matchType = ing.type === 'soft';
-      else if (filterType === 'other') matchType = ing.type === 'other';
-      else matchType = ing.subType === filterType;
-    }
+    const matchMain = mainType === 'all' ? true : ing.type === mainType;
+    const matchSub =
+      subType === 'all' ? true : safeString(ing.subType) === safeString(subType);
 
-    return matchSearch && matchType;
+    return matchSearch && matchMain && matchSub;
   });
 
   return (
@@ -2979,21 +3000,27 @@ const IngredientPickerModal = ({
           {/* 快速分類按鈕 */}
           <div className="flex gap-2 overflow-x-auto no-scrollbar pb-1">
             <button
-              onClick={() => setFilterType('all')}
+              onClick={() => {
+                setMainType('all');
+                setSubType('all');
+              }}
               className={`whitespace-nowrap px-3 py-1.5 rounded-lg text-xs border ${
-                filterType === 'all' 
+                mainType === 'all' 
                 ? 'bg-amber-600 border-amber-600 text-white' 
                 : 'border-slate-700 text-slate-400'
               }`}
             >
               全部
             </button>
-            {categories && categories.map(c => (
+            {safeCategories.map((c) => (
                <button
                key={c.id}
-               onClick={() => setFilterType(c.id)}
+               onClick={() => {
+                 setMainType(c.id);
+                 setSubType('all');
+               }}
                className={`whitespace-nowrap px-3 py-1.5 rounded-lg text-xs border ${
-                 filterType === c.id 
+                 mainType === c.id 
                  ? 'bg-slate-700 border-slate-500 text-white' 
                  : 'border-slate-700 text-slate-400'
                }`}
@@ -3002,6 +3029,35 @@ const IngredientPickerModal = ({
              </button>
             ))}
           </div>
+
+          {/* 小分類按鈕（選了大分類才出現） */}
+          {mainType !== 'all' && subTypeOptions.length > 0 && (
+            <div className="flex gap-2 overflow-x-auto no-scrollbar pb-1">
+              <button
+                onClick={() => setSubType('all')}
+                className={`whitespace-nowrap px-3 py-1.5 rounded-lg text-xs border ${
+                  subType === 'all'
+                    ? 'bg-slate-700 border-slate-500 text-white'
+                    : 'border-slate-700 text-slate-400'
+                }`}
+              >
+                全部細項
+              </button>
+              {subTypeOptions.map((st) => (
+                <button
+                  key={st}
+                  onClick={() => setSubType(st)}
+                  className={`whitespace-nowrap px-3 py-1.5 rounded-lg text-xs border ${
+                    subType === st
+                      ? 'bg-amber-900/60 border-amber-600 text-amber-200'
+                      : 'border-slate-700 text-slate-400'
+                  }`}
+                >
+                  {safeString(st).split(' ')[0]}
+                </button>
+              ))}
+            </div>
+          )}
         </div>
 
         <div className="flex-1 overflow-y-auto p-4 pt-0 space-y-2 custom-scrollbar">
@@ -3017,7 +3073,14 @@ const IngredientPickerModal = ({
                 className="w-full text-left p-3 rounded-xl bg-slate-800 border border-slate-700 hover:border-amber-500 flex justify-between items-center group transition-colors"
               >
                 <div>
-                  <div className="text-white font-medium text-sm">{ing.nameZh}</div>
+                  <div className="text-white font-medium text-sm flex items-center gap-2">
+                    <span>{ing.nameZh}</span>
+                    {ing.subType && (
+                      <span className="text-[10px] bg-slate-700 px-1.5 py-0.5 rounded text-slate-300 border border-slate-600">
+                        {safeString(ing.subType).split(' ')[0]}
+                      </span>
+                    )}
+                  </div>
                   <div className="text-xs text-slate-500">{ing.nameEn}</div>
                 </div>
                 <div className="text-amber-500 opacity-0 group-hover:opacity-100 transition-opacity">
