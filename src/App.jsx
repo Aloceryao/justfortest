@@ -419,7 +419,7 @@ const safeString = (str) => (str || '').toString();
 // ==========================================
 // ★ 版本號設定 (修改這裡會同步更新登入頁與設定頁)
 // ==========================================
-const APP_VERSION = 'v16.10.5 (登入測試完整版)';
+const APP_VERSION = 'v16.10.6 (登入測試完整版)';
 const safeNumber = (num) => {
   const n = parseFloat(num);
   return isNaN(n) ? 0 : n;
@@ -1895,22 +1895,41 @@ const FeaturedSectionScreen = ({
   const isConsumer = userRole === 'customer';
   const canEdit = userRole === 'owner' || userRole === 'manager';
 
-  const syncToCloud = (newSections) => {
-    setSections(newSections);
-    const shopId = localStorage.getItem('bar_shop_id');
-    if (window.firebase && shopId) {
-      const db = window.firebase.firestore();
-      const batch = db.batch();
-      newSections.forEach((sec) => {
-        batch.set(
-          db.collection('shops').doc(shopId).collection('sections').doc(sec.id),
-          sec
-        );
-      });
-      batch.commit().catch((e) => console.error(e));
-    }
-  };
+// --- 修正後的 syncToCloud (加上資料清洗) ---
+const syncToCloud = (newSections) => {
+  setSections(newSections);
+  const shopId = localStorage.getItem('bar_shop_id');
+  
+  if (window.firebase && shopId) {
+    const db = window.firebase.firestore();
+    const batch = db.batch();
+    
+    newSections.forEach((sec) => {
+      // ★ 關鍵修正：確保所有欄位都不是 undefined
+      const cleanSec = {
+        id: sec.id,
+        title: sec.title || '',
+        description: sec.description || '', // 防止描述是 undefined
+        subgroups: (sec.subgroups || []).map(sub => ({
+          id: sub.id,
+          title: sub.title || '',
+          description: sub.description || '', // 防止子分類描述是 undefined
+          recipeIds: sub.recipeIds || []
+        }))
+      };
 
+      batch.set(
+        db.collection('shops').doc(shopId).collection('sections').doc(sec.id),
+        cleanSec
+      );
+    });
+    
+    batch.commit().catch((e) => {
+      console.error('Section Save Error:', e);
+      alert('專區存檔失敗：' + e.message);
+    });
+  }
+};
   const deleteFromCloud = (id) => {
     const shopId = localStorage.getItem('bar_shop_id');
     if (window.firebase && shopId) {
