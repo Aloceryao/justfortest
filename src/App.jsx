@@ -419,7 +419,7 @@ const safeString = (str) => (str || '').toString();
 // ==========================================
 // ★ 版本號設定 (修改這裡會同步更新登入頁與設定頁)
 // ==========================================
-const APP_VERSION = 'v16.10.791 (登入測試完整版)';
+const APP_VERSION = 'v16.10.7 (登入測試完整版)';
 const safeNumber = (num) => {
   const n = parseFloat(num);
   return isNaN(n) ? 0 : n;
@@ -4835,12 +4835,11 @@ const ViewerOverlay = ({
     </div>
   );
 };
-
 // ==========================================
-// 5. Login Screen (B計畫：LocalStorage 強效版)
+// 5. Login Screen (完整改造版 - Email + 社群登入)
 // ==========================================
 
-const LoginScreen = ({ onLogin, firebaseReady }) => {
+const LoginScreen = ({ onLogin }) => {
   // 登入模式: 'select' | 'owner-login' | 'owner-register' | 'staff-login'
   const [mode, setMode] = useState('select');
   
@@ -4860,83 +4859,90 @@ const LoginScreen = ({ onLogin, firebaseReady }) => {
   const [loading, setLoading] = useState(false);
   const [showHelp, setShowHelp] = useState(false);
 
-  // 處理 Google Redirect 回來的結果
-  useEffect(() => {
-    // 1. 基本檢查：如果 Firebase 沒好，或是根本沒有「正在登入中」的標記，就不做事
-    if (!firebaseReady || !window.firebase) return;
+// 處理 Google Redirect 回來的結果
+const hasProcessedRedirect = React.useRef(false);
+  
+useEffect(() => {
+  const handleRedirectResult = async () => {
+    // 1. 如果 Firebase 還沒載入，或是已經處理過，就跳過
+    if (hasProcessedRedirect.current || !window.firebase) return;
     
-    const authMode = localStorage.getItem('google_auth_mode');
+    // 2. ★ 防護機制：如果根本沒有「Google 登入流程」的標記，就直接結束
+    // 這能有效防止 Safari 在重新整理頁面時誤判，造成無限轉圈
+    const authMode = sessionStorage.getItem('google_auth_mode');
     if (!authMode) return; 
 
-    const handleRedirectResult = async () => {
-      console.log('[Google Login] 偵測到登入標記:', authMode, '開始處理...');
-      setLoading(true);
+    hasProcessedRedirect.current = true;
+    
+    try {
+      const auth = window.firebase.auth();
       
-      try {
-        const auth = window.firebase.auth();
-        const result = await auth.getRedirectResult();
-        
-        // 如果沒有 User 物件，可能是剛載入頁面但不是從 Google 跳回來的
-        if (!result.user) {
-          console.log('[Google Login] 沒有偵測到 Redirect 用戶資料');
+      // 檢查是否已經有登入的人 (避免重複登入導致的迴圈)
+      if (auth.currentUser) {
+           console.log('偵測到已登入用戶，停止 Redirect 檢查');
+           return;
+      }
+
+      const result = await auth.getRedirectResult();
+      
+      if (!result.user) {
+        sessionStorage.removeItem('google_auth_mode'); // 清理標記
+        return;
+      }
+      
+      // ... (以下是原本的登入邏輯) ...
+      const userId = result.user.uid;
+      const userEmail = result.user.email;
+      sessionStorage.removeItem('google_auth_mode'); // 用完即丟
+      
+      const db = window.firebase.firestore();
+      const userDoc = await db.collection('users').doc(userId).get();
+      
+      if (authMode === 'login') {
+        if (!userDoc.exists || !userDoc.data().shopId) {
+          await auth.signOut();
+          setError('此 Google 帳號尚未註冊。請點擊下方「註冊新商店」進行註冊');
+          setMode('select');
           setLoading(false);
           return;
         }
+        const userShopId = userDoc.data().shopId;
+        onLogin(userShopId, 'owner');
         
-        console.log('[Google Login] Redirect 成功返回 User:', result.user.email);
-        const userId = result.user.uid;
-        const userEmail = result.user.email;
-        
-        // ★ 重要：成功拿到人之後，立刻清除標記，避免無限迴圈
-        localStorage.removeItem('google_auth_mode');
-        
-        const db = window.firebase.firestore();
-        const userDoc = await db.collection('users').doc(userId).get();
-        
-        if (authMode === 'login') {
-          // --- 登入流程 ---
-          if (!userDoc.exists || !userDoc.data().shopId) {
-            console.log('[Google Login] 帳號未註冊');
-            await auth.signOut();
-            setError('此 Google 帳號尚未註冊。請點擊下方「註冊新商店」進行註冊');
-            setMode('select');
-          } else {
-            const userShopId = userDoc.data().shopId;
-            console.log('[Google Login] 登入成功，Shop ID:', userShopId);
-            onLogin(userShopId, 'owner');
-          }
-        } else if (authMode === 'register') {
-          // --- 註冊流程 ---
-          if (userDoc.exists && userDoc.data().shopId) {
-            await auth.signOut();
-            setError('此 Google 帳號已註冊。請返回登入頁面進行登入');
-            setMode('select');
-          } else {
-            setEmail(userEmail);
-            setMode('google-register');
-          }
+      } else if (authMode === 'register') {
+        if (userDoc.exists && userDoc.data().shopId) {
+          await auth.signOut();
+          setError('此 Google 帳號已註冊。請返回登入頁面進行登入');
+          setMode('select');
+          setLoading(false);
+          return;
         }
-        
-      } catch (e) {
-        console.error('Redirect 處理錯誤:', e);
-        setError('登入處理失敗：' + e.message);
-        // 失敗也要清除標記，不然下次重整又會卡住
-        localStorage.removeItem('google_auth_mode');
-      } finally {
+        setEmail(userEmail);
+        setMode('google-register');
         setLoading(false);
       }
-    };
-    
-    handleRedirectResult();
-  }, [firebaseReady, onLogin]);
+      
+    } catch (e) {
+      console.error('Redirect 處理錯誤:', e);
+      setError('登入處理失敗：' + e.message);
+      setLoading(false);
+      sessionStorage.removeItem('google_auth_mode'); // 出錯也要清理
+    }
+  };
+  
+  // 稍微延遲執行，讓 Firebase SDK 有時間初始化
+  const timer = setTimeout(handleRedirectResult, 1000);
+  return () => clearTimeout(timer);
+}, []);
 
   // 店員模式：自動載入店員名單
   useEffect(() => {
-    if (mode === 'staff-login' && shopId.length >= 3 && window.firebase && firebaseReady) {
+    if (mode === 'staff-login' && shopId.length >= 3 && window.firebase) {
       const fetchStaff = async () => {
         setLoadingStaff(true);
         try {
           const db = window.firebase.firestore();
+          // 統一轉小寫查詢
           const normalizedShopId = shopId.toLowerCase();
           const doc = await db
             .collection('shops')
@@ -4958,12 +4964,11 @@ const LoginScreen = ({ onLogin, firebaseReady }) => {
       const timer = setTimeout(fetchStaff, 1000);
       return () => clearTimeout(timer);
     }
-  }, [shopId, mode, firebaseReady]);
+  }, [shopId, mode]);
 
   // ========== 店長 Email 登入 ==========
   const handleOwnerLogin = async () => {
     if (!email || !password) return setError('請輸入 Email 和密碼');
-    if (!firebaseReady) return setError('系統尚未載入完成，請稍候...');
     
     setLoading(true);
     setError('');
@@ -4973,6 +4978,7 @@ const LoginScreen = ({ onLogin, firebaseReady }) => {
       const result = await auth.signInWithEmailAndPassword(email, password);
       const userId = result.user.uid;
       
+      // 從 Firestore 取得該 Email 對應的 shopId
       const db = window.firebase.firestore();
       const userDoc = await db.collection('users').doc(userId).get();
       
@@ -4986,42 +4992,119 @@ const LoginScreen = ({ onLogin, firebaseReady }) => {
       
     } catch (e) {
       console.error('Login error:', e);
-      if (e.code === 'auth/user-not-found') setError('此 Email 尚未註冊');
-      else if (e.code === 'auth/wrong-password') setError('密碼錯誤');
-      else if (e.code === 'auth/invalid-email') setError('Email 格式不正確');
-      else setError('登入失敗：' + e.message);
+      if (e.code === 'auth/user-not-found') {
+        setError('此 Email 尚未註冊');
+      } else if (e.code === 'auth/wrong-password') {
+        setError('密碼錯誤');
+      } else if (e.code === 'auth/invalid-email') {
+        setError('Email 格式不正確');
+      } else {
+        setError('登入失敗：' + e.message);
+      }
     } finally {
       setLoading(false);
     }
   };
 
-  // ========== 店長 Google 登入 (改用 Redirect + LocalStorage) ==========
+  // ========== 店長 Google 登入 ==========
   const handleGoogleLogin = async () => {
-    if (!firebaseReady) return setError('系統載入中，請稍候...');
+    // 清除舊的 debug log
+    localStorage.removeItem('google_login_debug');
+    
+    // 記錄到 localStorage，即使頁面重新載入也能看到
+    const log = (msg) => {
+      console.log(msg);
+      const logs = JSON.parse(localStorage.getItem('google_login_debug') || '[]');
+      logs.push(`${new Date().toLocaleTimeString()} - ${msg}`);
+      localStorage.setItem('google_login_debug', JSON.stringify(logs.slice(-20))); // 保留最近 20 條
+    };
+    
+    log('═══════════════════════════════════════');
+    log('[Google Login] ⭐⭐⭐ 函數開始執行！ ⭐⭐⭐');
+    log('[Google Login] 時間: ' + new Date().toLocaleTimeString());
+    log('[Google Login] 這是第一行，如果看到這行表示函數有被呼叫');
+    
     setError('');
     setLoading(true);
     
     try {
+      log('[Google Login] 檢查 Firebase...');
+      if (!window.firebase) {
+        log('[Google Login] ❌ Firebase 未載入！');
+        setError('系統初始化失敗，請重新整理頁面');
+        setLoading(false);
+        return;
+      }
+      log('[Google Login] Firebase 已載入 ✓');
+      log('[Google Login] Firebase 版本: ' + window.firebase.SDK_VERSION);
+      
       const auth = window.firebase.auth();
+      log('[Google Login] Auth 物件已取得');
+      log('[Google Login] Auth 是否已初始化: ' + !!auth);
+      log('[Google Login] Firebase Auth 當前用戶: ' + (auth.currentUser ? auth.currentUser.email : 'null'));
+      
+      // 檢查是否已經有用戶登入
+      if (auth.currentUser) {
+        log('[Google Login] ⚠️ 偵測到已登入的用戶，先登出...');
+        await auth.signOut();
+        log('[Google Login] ✓ 已登出舊用戶');
+      }
+      
       const provider = new window.firebase.auth.GoogleAuthProvider();
+      log('[Google Login] Provider 已建立 ✓');
       
-      // ★ B 計畫核心：改用 localStorage，因為 iOS Standalone 容易遺失 sessionStorage
-      localStorage.setItem('google_auth_mode', 'login');
+      // 使用 Popup 模式（適合桌面和手機）
+      log('[Google Login] 🚀 使用 signInWithPopup...');
+      log('[Google Login] ⏳ 即將開啟 Google 登入彈窗');
+      log('═══════════════════════════════════════');
       
-      // iOS PWA 必須使用 redirect，popup 會被擋或卡住
-      await auth.signInWithRedirect(provider);
+      try {
+        log('[Google Login] 呼叫 signInWithPopup...');
+        const result = await auth.signInWithPopup(provider);
+        log('[Google Login] ✓ signInWithPopup 成功！');
+        log('[Google Login] User: ' + result.user.email);
+        
+        // 手動處理登入
+        const userId = result.user.uid;
+        const db = window.firebase.firestore();
+        const userDoc = await db.collection('users').doc(userId).get();
+        
+        if (!userDoc.exists || !userDoc.data().shopId) {
+          log('[Google Login] ✗ 用戶未註冊');
+          await auth.signOut();
+          setError('此 Google 帳號尚未註冊。請點擊下方「註冊新商店」進行註冊');
+          setLoading(false);
+          return;
+        }
+        
+        const userShopId = userDoc.data().shopId;
+        log('[Google Login] ✓ Shop ID: ' + userShopId);
+        log('[Google Login] 呼叫 onLogin...');
+        onLogin(userShopId, 'owner');
+        log('[Google Login] ✓✓✓ 登入成功！');
+        
+      } catch (popupError) {
+        log('[Google Login] ❌ signInWithPopup 發生錯誤！');
+        log('[Google Login] 錯誤: ' + popupError.message);
+        log('[Google Login] 錯誤代碼: ' + popupError.code);
+        throw popupError;
+      }
       
     } catch (e) {
-      console.error('[Google Login] 啟動失敗:', e);
-      setError('無法啟動 Google 登入：' + e.message);
+      log('═══════════════════════════════════════');
+      log('[Google Login] ❌ 發生錯誤！');
+      log('[Google Login] 錯誤訊息: ' + e.message);
+      log('[Google Login] 錯誤代碼: ' + e.code);
+      log('[Google Login] 錯誤 stack: ' + (e.stack || 'N/A'));
+      log('═══════════════════════════════════════');
+      console.error('[Google Login] 完整錯誤物件:', e);
+      setError('Google 登入失敗：' + e.message);
       setLoading(false);
-      localStorage.removeItem('google_auth_mode');
     }
   };
 
-  // ========== 店長 Google 註冊 (改用 Redirect + LocalStorage) ==========
+  // ========== 店長 Google 註冊（從註冊頁面觸發）==========
   const handleGoogleRegisterStart = async () => {
-    if (!firebaseReady) return;
     setLoading(true);
     setError('');
     
@@ -5029,22 +5112,26 @@ const LoginScreen = ({ onLogin, firebaseReady }) => {
       const auth = window.firebase.auth();
       const provider = new window.firebase.auth.GoogleAuthProvider();
       
-      provider.setCustomParameters({ prompt: 'select_account' });
+      // 提示選擇帳號
+      provider.setCustomParameters({
+        prompt: 'select_account'
+      });
       
-      // ★ B 計畫核心：註冊流程也改用 localStorage
-      localStorage.setItem('google_auth_mode', 'register');
+      // 使用 Redirect 模式（手機和電腦都適用）
+      // 標記這是註冊流程（用 sessionStorage，iOS 跳轉時會保留）
+      sessionStorage.setItem('google_auth_mode', 'register');
       
+      // 跳轉到 Google 驗證（之後的程式碼不會執行）
       await auth.signInWithRedirect(provider);
       
     } catch (e) {
       console.error('Google 註冊錯誤:', e);
       setError('Google 註冊失敗：' + e.message);
       setLoading(false);
-      localStorage.removeItem('google_auth_mode');
     }
   };
 
-  // ========== 店長註冊新商店 (Email) ==========
+  // ========== 店長註冊新商店 ==========
   const handleOwnerRegister = async () => {
     if (!email || !password) return setError('請輸入 Email 和密碼');
     if (!shopId) return setError('請輸入商店代碼');
@@ -5057,16 +5144,28 @@ const LoginScreen = ({ onLogin, firebaseReady }) => {
       const auth = window.firebase.auth();
       const db = window.firebase.firestore();
       
+      // 統一轉小寫（避免大小寫錯誤）
       const normalizedShopId = shopId.toLowerCase();
       
+      // 檢查 shopId 是否已被使用（先查小寫，再查原始輸入）
       const shopDocLower = await db.collection('shops').doc(normalizedShopId).get();
       if (shopDocLower.exists) {
         return setError('此商店代碼已被使用，請換一個');
       }
       
+      // 為了相容舊資料，也檢查原始大小寫
+      if (shopId !== normalizedShopId) {
+        const shopDocOriginal = await db.collection('shops').doc(shopId).get();
+        if (shopDocOriginal.exists) {
+          return setError('此商店代碼已被使用（大小寫不同），請換一個');
+        }
+      }
+      
+      // 建立 Firebase Auth 帳號
       const result = await auth.createUserWithEmailAndPassword(email, password);
       const userId = result.user.uid;
       
+      // 建立 user 文件（使用小寫版本）
       await db.collection('users').doc(userId).set({
         email: email,
         shopId: normalizedShopId,
@@ -5074,6 +5173,7 @@ const LoginScreen = ({ onLogin, firebaseReady }) => {
         createdAt: new Date(),
       });
       
+      // 建立商店基本設定（使用小寫版本）
       await db.collection('shops').doc(normalizedShopId).collection('settings').doc('config').set({
         shopName: shopName || normalizedShopId,
         ownerId: userId,
@@ -5082,20 +5182,26 @@ const LoginScreen = ({ onLogin, firebaseReady }) => {
         staffList: [],
       });
       
+      // 成功註冊，直接登入（使用小寫版本）
       onLogin(normalizedShopId, 'owner');
       
     } catch (e) {
       console.error('Register error:', e);
-      if (e.code === 'auth/email-already-in-use') setError('此 Email 已被註冊');
-      else if (e.code === 'auth/invalid-email') setError('Email 格式不正確');
-      else if (e.code === 'auth/weak-password') setError('密碼強度不足');
-      else setError('註冊失敗：' + e.message);
+      if (e.code === 'auth/email-already-in-use') {
+        setError('此 Email 已被註冊');
+      } else if (e.code === 'auth/invalid-email') {
+        setError('Email 格式不正確');
+      } else if (e.code === 'auth/weak-password') {
+        setError('密碼強度不足（至少 6 個字元）');
+      } else {
+        setError('註冊失敗：' + e.message);
+      }
     } finally {
       setLoading(false);
     }
   };
 
-  // ========== Google 註冊新商店 (Redirect 後的第二步) ==========
+  // ========== Google 註冊新商店 ==========
   const handleGoogleRegister = async () => {
     if (!shopId) return setError('請輸入商店代碼');
     
@@ -5115,13 +5221,25 @@ const LoginScreen = ({ onLogin, firebaseReady }) => {
       
       const userId = currentUser.uid;
       const userEmail = currentUser.email;
+      
+      // 統一轉小寫（避免大小寫錯誤）
       const normalizedShopId = shopId.toLowerCase();
       
+      // 檢查 shopId 是否已被使用（先查小寫，再查原始輸入）
       const shopDocLower = await db.collection('shops').doc(normalizedShopId).get();
       if (shopDocLower.exists) {
         return setError('此商店代碼已被使用，請換一個');
       }
       
+      // 為了相容舊資料，也檢查原始大小寫
+      if (shopId !== normalizedShopId) {
+        const shopDocOriginal = await db.collection('shops').doc(shopId).get();
+        if (shopDocOriginal.exists) {
+          return setError('此商店代碼已被使用（大小寫不同），請換一個');
+        }
+      }
+      
+      // 建立 user 文件（使用小寫版本）
       await db.collection('users').doc(userId).set({
         email: userEmail,
         shopId: normalizedShopId,
@@ -5130,6 +5248,7 @@ const LoginScreen = ({ onLogin, firebaseReady }) => {
         loginMethod: 'google',
       });
       
+      // 建立商店基本設定（使用小寫版本）
       await db.collection('shops').doc(normalizedShopId).collection('settings').doc('config').set({
         shopName: shopName || normalizedShopId,
         ownerId: userId,
@@ -5138,6 +5257,7 @@ const LoginScreen = ({ onLogin, firebaseReady }) => {
         staffList: [],
       });
       
+      // 成功註冊，直接登入（使用小寫版本）
       onLogin(normalizedShopId, 'owner');
       
     } catch (e) {
@@ -5151,25 +5271,36 @@ const LoginScreen = ({ onLogin, firebaseReady }) => {
   // ========== 忘記密碼 ==========
   const handleForgotPassword = async () => {
     if (!email) return setError('請輸入您註冊時使用的 Email');
+    
     setLoading(true);
     setError('');
+    
     try {
       const auth = window.firebase.auth();
       await auth.sendPasswordResetEmail(email);
+      
+      // 成功寄送
       setMode('forgot-password-success');
+      
     } catch (e) {
       console.error('Forgot password error:', e);
-      if (e.code === 'auth/user-not-found') setError('此 Email 尚未註冊');
-      else if (e.code === 'auth/invalid-email') setError('Email 格式不正確');
-      else setError('寄送失敗：' + e.message);
+      if (e.code === 'auth/user-not-found') {
+        setError('此 Email 尚未註冊');
+      } else if (e.code === 'auth/invalid-email') {
+        setError('Email 格式不正確');
+      } else {
+        setError('寄送失敗：' + e.message);
+      }
     } finally {
       setLoading(false);
     }
   };
 
-  // ========== 店員登入 ==========
+  // ========== 店員登入（保持原邏輯）==========
   const handleStaffLogin = async () => {
     if (!shopId) return setError('請輸入商店代碼');
+    
+    // 統一轉小寫
     const normalizedShopId = shopId.toLowerCase();
     
     if (staffList.length > 0) {
@@ -5183,6 +5314,7 @@ const LoginScreen = ({ onLogin, firebaseReady }) => {
       const finalRole = staff.role === 'manager' ? 'manager' : 'staff';
       onLogin(normalizedShopId, finalRole);
     } else {
+      // 沒有員工名單，直接以 staff 身分登入
       onLogin(normalizedShopId, 'staff');
     }
   };
@@ -5196,14 +5328,6 @@ const LoginScreen = ({ onLogin, firebaseReady }) => {
       </div>
       <h1 className="text-3xl font-serif text-white font-bold mb-2">Bar Manager</h1>
       <p className="text-slate-400 text-sm mb-8">雲端調酒管理系統 {APP_VERSION}</p>
-
-      {/* 系統載入提示 (如果 Firebase 還沒好) */}
-      {!firebaseReady && (
-        <div className="mb-6 px-4 py-2 bg-blue-900/30 text-blue-300 rounded-full text-xs font-bold flex items-center gap-2 animate-pulse">
-          <RefreshCcw size={12} className="animate-spin" />
-          系統連線中...
-        </div>
-      )}
 
       {/* 幫助按鈕 */}
       <button 
@@ -5222,9 +5346,7 @@ const LoginScreen = ({ onLogin, firebaseReady }) => {
             
             <button
               onClick={() => setMode('owner-login')}
-              // ★ 這裡加上 disabled 保護
-              disabled={!firebaseReady}
-              className="w-full p-6 bg-gradient-to-br from-amber-600 to-orange-700 rounded-2xl border border-amber-500 text-white hover:opacity-90 transition-all active:scale-95 flex items-center justify-between shadow-xl disabled:opacity-50 disabled:cursor-not-allowed"
+              className="w-full p-6 bg-gradient-to-br from-amber-600 to-orange-700 rounded-2xl border border-amber-500 text-white hover:opacity-90 transition-all active:scale-95 flex items-center justify-between shadow-xl"
             >
               <div className="flex items-center gap-4">
                 <KeyRound size={32} />
@@ -5238,8 +5360,7 @@ const LoginScreen = ({ onLogin, firebaseReady }) => {
 
             <button
               onClick={() => setMode('staff-login')}
-              disabled={!firebaseReady}
-              className="w-full p-6 bg-gradient-to-br from-blue-600 to-indigo-700 rounded-2xl border border-blue-500 text-white hover:opacity-90 transition-all active:scale-95 flex items-center justify-between shadow-xl disabled:opacity-50 disabled:cursor-not-allowed"
+              className="w-full p-6 bg-gradient-to-br from-blue-600 to-indigo-700 rounded-2xl border border-blue-500 text-white hover:opacity-90 transition-all active:scale-95 flex items-center justify-between shadow-xl"
             >
               <div className="flex items-center gap-4">
                 <Users size={32} />
@@ -5254,8 +5375,7 @@ const LoginScreen = ({ onLogin, firebaseReady }) => {
             <div className="text-center mt-6">
               <button
                 onClick={() => setMode('owner-register')}
-                disabled={!firebaseReady}
-                className="text-amber-500 text-sm underline hover:text-amber-400 disabled:opacity-50"
+                className="text-amber-500 text-sm underline hover:text-amber-400"
               >
                 還沒有帳號？點此註冊新商店
               </button>
@@ -5301,7 +5421,7 @@ const LoginScreen = ({ onLogin, firebaseReady }) => {
 
             <button
               onClick={handleOwnerLogin}
-              disabled={loading || !firebaseReady}
+              disabled={loading}
               className="w-full py-4 bg-amber-600 text-white font-bold rounded-xl shadow-lg hover:bg-amber-500 transition-all active:scale-95 disabled:opacity-50 disabled:cursor-not-allowed flex items-center justify-center gap-2"
             >
               {loading ? (
@@ -5339,9 +5459,11 @@ const LoginScreen = ({ onLogin, firebaseReady }) => {
               type="button"
               onClick={(e) => {
                 e.preventDefault();
+                e.stopPropagation();
+                console.log('🔴🔴🔴 按鈕被點擊！開始執行 handleGoogleLogin 🔴🔴🔴');
                 handleGoogleLogin();
               }}
-              disabled={loading || !firebaseReady}
+              disabled={loading}
               className="w-full py-4 bg-white text-slate-900 font-bold rounded-xl shadow-lg hover:bg-slate-100 transition-all active:scale-95 disabled:opacity-50 disabled:cursor-not-allowed flex items-center justify-center gap-3"
             >
               <svg width="20" height="20" viewBox="0 0 24 24">
@@ -5350,7 +5472,7 @@ const LoginScreen = ({ onLogin, firebaseReady }) => {
                 <path fill="#FBBC05" d="M5.84 14.09c-.22-.66-.35-1.36-.35-2.09s.13-1.43.35-2.09V7.07H2.18C1.43 8.55 1 10.22 1 12s.43 3.45 1.18 4.93l2.85-2.22.81-.62z"/>
                 <path fill="#EA4335" d="M12 5.38c1.62 0 3.06.56 4.21 1.64l3.15-3.15C17.45 2.09 14.97 1 12 1 7.7 1 3.99 3.47 2.18 7.07l3.66 2.84c.87-2.6 3.3-4.53 6.16-4.53z"/>
               </svg>
-              Google 登入 (Redirect)
+              Google 登入
             </button>
 
             <div className="text-center mt-4">
@@ -5419,7 +5541,7 @@ const LoginScreen = ({ onLogin, firebaseReady }) => {
 
             <button
               onClick={handleOwnerRegister}
-              disabled={loading || !firebaseReady}
+              disabled={loading}
               className="w-full py-4 bg-gradient-to-r from-amber-600 to-orange-600 text-white font-bold rounded-xl shadow-lg hover:opacity-90 transition-all active:scale-95 disabled:opacity-50 disabled:cursor-not-allowed flex items-center justify-center gap-2"
             >
               {loading ? (
@@ -5448,7 +5570,7 @@ const LoginScreen = ({ onLogin, firebaseReady }) => {
             {/* Google 註冊按鈕 */}
             <button
               onClick={handleGoogleRegisterStart}
-              disabled={loading || !firebaseReady}
+              disabled={loading}
               className="w-full py-4 bg-white text-slate-900 font-bold rounded-xl shadow-lg hover:bg-slate-100 transition-all active:scale-95 disabled:opacity-50 disabled:cursor-not-allowed flex items-center justify-center gap-3"
             >
               {loading ? (
@@ -5480,7 +5602,7 @@ const LoginScreen = ({ onLogin, firebaseReady }) => {
           </div>
         )}
 
-        {/* ========== Google 註冊新商店 (Redirect 返回後) ========== */}
+        {/* ========== Google 註冊新商店 ========== */}
         {mode === 'google-register' && (
           <div className="space-y-4 animate-fade-in">
             <button
@@ -5503,7 +5625,7 @@ const LoginScreen = ({ onLogin, firebaseReady }) => {
                   <path fill="#EA4335" d="M12 5.38c1.62 0 3.06.56 4.21 1.64l3.15-3.15C17.45 2.09 14.97 1 12 1 7.7 1 3.99 3.47 2.18 7.07l3.66 2.84c.87-2.6 3.3-4.53 6.16-4.53z"/>
                 </svg>
               </div>
-              <h2 className="text-white font-bold text-xl">Google 驗證成功！</h2>
+              <h2 className="text-white font-bold text-xl">Google 登入成功！</h2>
               <p className="text-slate-400 text-sm mt-2">
                 歡迎，{email}
               </p>
@@ -5539,7 +5661,7 @@ const LoginScreen = ({ onLogin, firebaseReady }) => {
 
             <button
               onClick={handleGoogleRegister}
-              disabled={loading || !firebaseReady}
+              disabled={loading}
               className="w-full py-4 bg-gradient-to-r from-blue-600 to-indigo-600 text-white font-bold rounded-xl shadow-lg hover:opacity-90 transition-all active:scale-95 disabled:opacity-50 disabled:cursor-not-allowed flex items-center justify-center gap-2"
             >
               {loading ? (
@@ -5600,7 +5722,7 @@ const LoginScreen = ({ onLogin, firebaseReady }) => {
 
             <button
               onClick={handleForgotPassword}
-              disabled={loading || !firebaseReady}
+              disabled={loading}
               className="w-full py-4 bg-amber-600 text-white font-bold rounded-xl shadow-lg hover:bg-amber-500 transition-all active:scale-95 disabled:opacity-50 disabled:cursor-not-allowed flex items-center justify-center gap-2"
             >
               {loading ? (
@@ -5725,7 +5847,7 @@ const LoginScreen = ({ onLogin, firebaseReady }) => {
             {shopId.length >= 3 && (
               <button
                 onClick={handleStaffLogin}
-                disabled={loading || !firebaseReady}
+                disabled={loading}
                 className="w-full py-4 bg-blue-600 text-white font-bold rounded-xl shadow-lg hover:bg-blue-500 transition-all active:scale-95 disabled:opacity-50 disabled:cursor-not-allowed flex items-center justify-center gap-2"
               >
                 {loading ? (
@@ -6926,8 +7048,7 @@ const handleLogout = async () => {
   
   if (!isLoggedIn) {
     console.log('[App Render] 渲染 LoginScreen');
-    // ★ 修改：傳入 firebaseReady 狀態，防止在 SDK 載入前點擊
-    return <LoginScreen onLogin={handleLogin} firebaseReady={firebaseReady} />;
+    return <LoginScreen onLogin={handleLogin} />;
   }
   
   console.log('[App Render] 渲染主畫面');
