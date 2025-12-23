@@ -419,7 +419,7 @@ const safeString = (str) => (str || '').toString();
 // ==========================================
 // ★ 版本號設定 (修改這裡會同步更新登入頁與設定頁)
 // ==========================================
-const APP_VERSION = 'v16.10.7 (登入測試完整版)';
+const APP_VERSION = 'v16.10.75 (登入測試完整版)';
 const safeNumber = (num) => {
   const n = parseFloat(num);
   return isNaN(n) ? 0 : n;
@@ -4859,80 +4859,85 @@ const LoginScreen = ({ onLogin }) => {
   const [loading, setLoading] = useState(false);
   const [showHelp, setShowHelp] = useState(false);
 
-// 處理 Google Redirect 回來的結果
+// 處理 Google Redirect 回來的結果 (簡潔版)
 const hasProcessedRedirect = React.useRef(false);
   
 useEffect(() => {
-  const handleRedirectResult = async () => {
-    // 1. 如果 Firebase 還沒載入，或是已經處理過，就跳過
-    if (hasProcessedRedirect.current || !window.firebase) return;
-    
-    // 2. ★ 防護機制：如果根本沒有「Google 登入流程」的標記，就直接結束
-    // 這能有效防止 Safari 在重新整理頁面時誤判，造成無限轉圈
-    const authMode = sessionStorage.getItem('google_auth_mode');
-    if (!authMode) return; 
-
-    hasProcessedRedirect.current = true;
-    
-    try {
-      const auth = window.firebase.auth();
-      
-      // 檢查是否已經有登入的人 (避免重複登入導致的迴圈)
-      if (auth.currentUser) {
-           console.log('偵測到已登入用戶，停止 Redirect 檢查');
-           return;
-      }
-
-      const result = await auth.getRedirectResult();
-      
-      if (!result.user) {
-        sessionStorage.removeItem('google_auth_mode'); // 清理標記
-        return;
-      }
-      
-      // ... (以下是原本的登入邏輯) ...
-      const userId = result.user.uid;
-      const userEmail = result.user.email;
-      sessionStorage.removeItem('google_auth_mode'); // 用完即丟
-      
-      const db = window.firebase.firestore();
-      const userDoc = await db.collection('users').doc(userId).get();
-      
-      if (authMode === 'login') {
-        if (!userDoc.exists || !userDoc.data().shopId) {
-          await auth.signOut();
-          setError('此 Google 帳號尚未註冊。請點擊下方「註冊新商店」進行註冊');
-          setMode('select');
-          setLoading(false);
-          return;
-        }
-        const userShopId = userDoc.data().shopId;
-        onLogin(userShopId, 'owner');
-        
-      } else if (authMode === 'register') {
-        if (userDoc.exists && userDoc.data().shopId) {
-          await auth.signOut();
-          setError('此 Google 帳號已註冊。請返回登入頁面進行登入');
-          setMode('select');
-          setLoading(false);
-          return;
-        }
-        setEmail(userEmail);
-        setMode('google-register');
-        setLoading(false);
-      }
-      
-    } catch (e) {
-      console.error('Redirect 處理錯誤:', e);
-      setError('登入處理失敗：' + e.message);
-      setLoading(false);
-      sessionStorage.removeItem('google_auth_mode'); // 出錯也要清理
-    }
-  };
+  // 1. 基本檢查：確認 Firebase 已載入
+  if (!window.firebase) return;
   
-  // 稍微延遲執行，讓 Firebase SDK 有時間初始化
-  const timer = setTimeout(handleRedirectResult, 1000);
-  return () => clearTimeout(timer);
+  // 2. 檢查是否有「正在登入」的標記 (避免誤判)
+  // 改用 localStorage 比較穩，可以對抗 iOS 重新整理頁面
+  const authMode = localStorage.getItem('google_auth_mode');
+  if (!authMode) return; // 沒有標記 = 不是登入回來的，直接結束
+
+  // 3. 避免重複執行
+  if (hasProcessedRedirect.current) return;
+  hasProcessedRedirect.current = true;
+
+  // 只要有標記，就先鎖住畫面轉圈圈，避免使用者亂按
+  setLoading(true);
+
+  const auth = window.firebase.auth();
+  const db = window.firebase.firestore();
+
+  // 4. 直接等待結果，不加額外計時器
+  auth.getRedirectResult()
+    .then(async (result) => {
+      // --- 情況 A: 成功抓到使用者 ---
+      if (result.user) {
+         localStorage.removeItem('google_auth_mode'); // 清除標記
+         
+         const userId = result.user.uid;
+         const userDoc = await db.collection('users').doc(userId).get();
+
+         if (authMode === 'login') {
+           if (!userDoc.exists || !userDoc.data().shopId) {
+             await auth.signOut();
+             setError('此 Google 帳號尚未註冊，請註冊新商店');
+             setMode('select');
+           } else {
+             onLogin(userDoc.data().shopId, 'owner');
+           }
+         } else if (authMode === 'register') {
+           if (userDoc.exists && userDoc.data().shopId) {
+             await auth.signOut();
+             setError('此帳號已註冊過，請直接登入');
+             setMode('select');
+           } else {
+             setEmail(result.user.email);
+             setMode('google-register');
+           }
+         }
+         setLoading(false);
+         return;
+      }
+
+      // --- 情況 B: 沒抓到 result，但 currentUser 可能已經有了 (iOS 偶發) ---
+      if (auth.currentUser) {
+         localStorage.removeItem('google_auth_mode');
+         const userId = auth.currentUser.uid;
+         const userDoc = await db.collection('users').doc(userId).get();
+         
+         if (userDoc.exists && userDoc.data().shopId) {
+           onLogin(userDoc.data().shopId, 'owner');
+         }
+         setLoading(false);
+         return;
+      }
+
+      // --- 情況 C: 真的沒人 (可能是使用者按了取消) ---
+      // 這裡一定要關掉 Loading，不然會卡死
+      console.log('Redirect 回來但沒有使用者資料');
+      setLoading(false);
+      localStorage.removeItem('google_auth_mode');
+    })
+    .catch((e) => {
+      console.error(e);
+      setError('登入失敗：' + e.message);
+      setLoading(false);
+      localStorage.removeItem('google_auth_mode');
+    });
 }, []);
 
   // 店員模式：自動載入店員名單
@@ -5006,102 +5011,36 @@ useEffect(() => {
     }
   };
 
-  // ========== 店長 Google 登入 ==========
-  const handleGoogleLogin = async () => {
-    // 清除舊的 debug log
-    localStorage.removeItem('google_login_debug');
-    
-    // 記錄到 localStorage，即使頁面重新載入也能看到
-    const log = (msg) => {
-      console.log(msg);
-      const logs = JSON.parse(localStorage.getItem('google_login_debug') || '[]');
-      logs.push(`${new Date().toLocaleTimeString()} - ${msg}`);
-      localStorage.setItem('google_login_debug', JSON.stringify(logs.slice(-20))); // 保留最近 20 條
-    };
-    
-    log('═══════════════════════════════════════');
-    log('[Google Login] ⭐⭐⭐ 函數開始執行！ ⭐⭐⭐');
-    log('[Google Login] 時間: ' + new Date().toLocaleTimeString());
-    log('[Google Login] 這是第一行，如果看到這行表示函數有被呼叫');
-    
-    setError('');
-    setLoading(true);
-    
-    try {
-      log('[Google Login] 檢查 Firebase...');
-      if (!window.firebase) {
-        log('[Google Login] ❌ Firebase 未載入！');
-        setError('系統初始化失敗，請重新整理頁面');
-        setLoading(false);
-        return;
-      }
-      log('[Google Login] Firebase 已載入 ✓');
-      log('[Google Login] Firebase 版本: ' + window.firebase.SDK_VERSION);
-      
-      const auth = window.firebase.auth();
-      log('[Google Login] Auth 物件已取得');
-      log('[Google Login] Auth 是否已初始化: ' + !!auth);
-      log('[Google Login] Firebase Auth 當前用戶: ' + (auth.currentUser ? auth.currentUser.email : 'null'));
-      
-      // 檢查是否已經有用戶登入
-      if (auth.currentUser) {
-        log('[Google Login] ⚠️ 偵測到已登入的用戶，先登出...');
-        await auth.signOut();
-        log('[Google Login] ✓ 已登出舊用戶');
-      }
-      
-      const provider = new window.firebase.auth.GoogleAuthProvider();
-      log('[Google Login] Provider 已建立 ✓');
-      
-      // 使用 Popup 模式（適合桌面和手機）
-      log('[Google Login] 🚀 使用 signInWithPopup...');
-      log('[Google Login] ⏳ 即將開啟 Google 登入彈窗');
-      log('═══════════════════════════════════════');
-      
-      try {
-        log('[Google Login] 呼叫 signInWithPopup...');
-        const result = await auth.signInWithPopup(provider);
-        log('[Google Login] ✓ signInWithPopup 成功！');
-        log('[Google Login] User: ' + result.user.email);
-        
-        // 手動處理登入
-        const userId = result.user.uid;
-        const db = window.firebase.firestore();
-        const userDoc = await db.collection('users').doc(userId).get();
-        
-        if (!userDoc.exists || !userDoc.data().shopId) {
-          log('[Google Login] ✗ 用戶未註冊');
-          await auth.signOut();
-          setError('此 Google 帳號尚未註冊。請點擊下方「註冊新商店」進行註冊');
-          setLoading(false);
-          return;
-        }
-        
-        const userShopId = userDoc.data().shopId;
-        log('[Google Login] ✓ Shop ID: ' + userShopId);
-        log('[Google Login] 呼叫 onLogin...');
-        onLogin(userShopId, 'owner');
-        log('[Google Login] ✓✓✓ 登入成功！');
-        
-      } catch (popupError) {
-        log('[Google Login] ❌ signInWithPopup 發生錯誤！');
-        log('[Google Login] 錯誤: ' + popupError.message);
-        log('[Google Login] 錯誤代碼: ' + popupError.code);
-        throw popupError;
-      }
-      
-    } catch (e) {
-      log('═══════════════════════════════════════');
-      log('[Google Login] ❌ 發生錯誤！');
-      log('[Google Login] 錯誤訊息: ' + e.message);
-      log('[Google Login] 錯誤代碼: ' + e.code);
-      log('[Google Login] 錯誤 stack: ' + (e.stack || 'N/A'));
-      log('═══════════════════════════════════════');
-      console.error('[Google Login] 完整錯誤物件:', e);
-      setError('Google 登入失敗：' + e.message);
+// ========== 店長 Google 登入 (改用 Redirect 支援 iOS PWA) ==========
+const handleGoogleLogin = async () => {
+  setError('');
+  setLoading(true);
+  
+  try {
+    if (!window.firebase) {
+      setError('系統載入中，請稍後再試');
       setLoading(false);
+      return;
     }
-  };
+
+    const auth = window.firebase.auth();
+    const provider = new window.firebase.auth.GoogleAuthProvider();
+    
+    // ★ 設定標記：告訴系統「我現在要去 Google 登入囉」
+    // 這樣跳回來的時候，上面的 useEffect 才會運作
+    localStorage.setItem('google_auth_mode', 'login');
+    
+    // ★ 使用 Redirect (跳轉頁面) 取代 Popup (彈窗)
+    // 這能解決 iOS PWA 無法彈出視窗的問題
+    await auth.signInWithRedirect(provider);
+    
+  } catch (e) {
+    console.error(e);
+    setError('無法啟動登入：' + e.message);
+    setLoading(false);
+    localStorage.removeItem('google_auth_mode');
+  }
+};
 
   // ========== 店長 Google 註冊（從註冊頁面觸發）==========
   const handleGoogleRegisterStart = async () => {
