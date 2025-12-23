@@ -419,7 +419,7 @@ const safeString = (str) => (str || '').toString();
 // ==========================================
 // ★ 版本號設定 (修改這裡會同步更新登入頁與設定頁)
 // ==========================================
-const APP_VERSION = 'v16.10.87 (批量增加測試版)';
+const APP_VERSION = 'v16.10.7 (登入測試完整版)';
 const safeNumber = (num) => {
   const n = parseFloat(num);
   return isNaN(n) ? 0 : n;
@@ -4859,114 +4859,80 @@ const LoginScreen = ({ onLogin }) => {
   const [loading, setLoading] = useState(false);
   const [showHelp, setShowHelp] = useState(false);
 
-// 處理 Google Redirect 回來的結果 (最終防禦版：死等 5 秒)
+// 處理 Google Redirect 回來的結果
 const hasProcessedRedirect = React.useRef(false);
   
 useEffect(() => {
-  // 1. 檢查是否有標記
-  const authMode = localStorage.getItem('google_auth_mode');
-  if (!authMode) return; 
-
-  // 有標記，立刻鎖住畫面轉圈圈
-  setLoading(true);
-
-  // 設定一個 8 秒的強制保險絲，萬一真的都沒反應，8 秒後自動解鎖，避免永久卡死
-  const safetyTimer = setTimeout(() => {
-      const stillWaiting = localStorage.getItem('google_auth_mode');
-      if (stillWaiting) {
-          console.log('等太久了，自動解除鎖定');
-          setLoading(false);
-          localStorage.removeItem('google_auth_mode');
-      }
-  }, 8000);
-
-  const checkLoginStatus = () => {
-    // 如果 Firebase 還沒載入，每 0.5 秒問一次
-    if (!window.firebase || !window.firebase.auth) {
-      setTimeout(checkLoginStatus, 500);
-      return;
-    }
-
-    const auth = window.firebase.auth();
+  const handleRedirectResult = async () => {
+    // 1. 如果 Firebase 還沒載入，或是已經處理過，就跳過
+    if (hasProcessedRedirect.current || !window.firebase) return;
     
-    // 使用 getRedirectResult 來抓取結果
-    auth.getRedirectResult()
-      .then(async (result) => {
-          // --- 情況 A: 抓到了！ ---
-          if (result.user) {
-              // 清除保險絲
-              clearTimeout(safetyTimer);
-              localStorage.removeItem('google_auth_mode');
-              
-              const userId = result.user.uid;
-              const userEmail = result.user.email;
-              const db = window.firebase.firestore();
-              
-              // 這裡稍微等一下 Firestore，避免連線還沒建立
-              try {
-                  const userDoc = await db.collection('users').doc(userId).get();
-                  
-                  if (authMode === 'login' || !authMode) {
-                      if (!userDoc.exists || !userDoc.data().shopId) {
-                          await auth.signOut();
-                          alert('登入失敗：此帳號尚未註冊');
-                          setLoading(false);
-                      } else {
-                          onLogin(userDoc.data().shopId, 'owner');
-                      }
-                  } else if (authMode === 'register') {
-                      if (userDoc.exists && userDoc.data().shopId) {
-                          await auth.signOut();
-                          alert('此帳號已註冊，請登入');
-                          setLoading(false);
-                      } else {
-                          setEmail(userEmail);
-                          setMode('google-register');
-                          setLoading(false);
-                      }
-                  }
-              } catch (err) {
-                  alert('讀取資料失敗：' + err.message);
-                  setLoading(false);
-              }
-              return;
-          }
+    // 2. ★ 防護機制：如果根本沒有「Google 登入流程」的標記，就直接結束
+    // 這能有效防止 Safari 在重新整理頁面時誤判，造成無限轉圈
+    const authMode = sessionStorage.getItem('google_auth_mode');
+    if (!authMode) return; 
 
-          // --- 情況 B: 沒抓到 redirect 結果 ---
-          // 這時候不要急著放棄！再檢查一次 currentUser
-          if (auth.currentUser) {
-              clearTimeout(safetyTimer);
-              localStorage.removeItem('google_auth_mode');
-              
-              const userId = auth.currentUser.uid;
-              const db = window.firebase.firestore();
-              const userDoc = await db.collection('users').doc(userId).get();
-              if (userDoc.exists && userDoc.data().shopId) {
-                  onLogin(userDoc.data().shopId, 'owner');
-              } else {
-                  setLoading(false); // 有登入但沒資料
-              }
-              return;
-          }
+    hasProcessedRedirect.current = true;
+    
+    try {
+      const auth = window.firebase.auth();
+      
+      // 檢查是否已經有登入的人 (避免重複登入導致的迴圈)
+      if (auth.currentUser) {
+           console.log('偵測到已登入用戶，停止 Redirect 檢查');
+           return;
+      }
 
-          // --- 情況 C: 真的什麼都沒有 ---
-          // 注意：我們不在這裡 setLoading(false)，讓 safetyTimer 去關閉
-          // 因為有時候 Safari 會慢半拍才吐出 currentUser
-          console.log('目前沒抓到人，繼續等待...');
-      })
-      .catch((error) => {
-          clearTimeout(safetyTimer);
-          console.error(error);
-          alert('登入錯誤：' + error.message);
+      const result = await auth.getRedirectResult();
+      
+      if (!result.user) {
+        sessionStorage.removeItem('google_auth_mode'); // 清理標記
+        return;
+      }
+      
+      // ... (以下是原本的登入邏輯) ...
+      const userId = result.user.uid;
+      const userEmail = result.user.email;
+      sessionStorage.removeItem('google_auth_mode'); // 用完即丟
+      
+      const db = window.firebase.firestore();
+      const userDoc = await db.collection('users').doc(userId).get();
+      
+      if (authMode === 'login') {
+        if (!userDoc.exists || !userDoc.data().shopId) {
+          await auth.signOut();
+          setError('此 Google 帳號尚未註冊。請點擊下方「註冊新商店」進行註冊');
+          setMode('select');
           setLoading(false);
-          localStorage.removeItem('google_auth_mode');
-      });
+          return;
+        }
+        const userShopId = userDoc.data().shopId;
+        onLogin(userShopId, 'owner');
+        
+      } else if (authMode === 'register') {
+        if (userDoc.exists && userDoc.data().shopId) {
+          await auth.signOut();
+          setError('此 Google 帳號已註冊。請返回登入頁面進行登入');
+          setMode('select');
+          setLoading(false);
+          return;
+        }
+        setEmail(userEmail);
+        setMode('google-register');
+        setLoading(false);
+      }
+      
+    } catch (e) {
+      console.error('Redirect 處理錯誤:', e);
+      setError('登入處理失敗：' + e.message);
+      setLoading(false);
+      sessionStorage.removeItem('google_auth_mode'); // 出錯也要清理
+    }
   };
-
-  checkLoginStatus();
   
-  // 組件卸載時清除計時器
-  return () => clearTimeout(safetyTimer);
+  // 稍微延遲執行，讓 Firebase SDK 有時間初始化
+  const timer = setTimeout(handleRedirectResult, 1000);
+  return () => clearTimeout(timer);
 }, []);
 
   // 店員模式：自動載入店員名單
@@ -5136,34 +5102,6 @@ useEffect(() => {
       setLoading(false);
     }
   };
-// ========== (新) 測試用的 Redirect 登入 (改用 localStorage) ==========
-const handleGoogleLogin_Redirect = async () => {
-  localStorage.removeItem('google_login_debug');
-  setError('');
-  setLoading(true);
-  
-  try {
-    if (!window.firebase) {
-      alert('錯誤：系統尚未載入完成');
-      setLoading(false);
-      return;
-    }
-
-    const auth = window.firebase.auth();
-    const provider = new window.firebase.auth.GoogleAuthProvider();
-    
-    // ★ 關鍵修改：改用 localStorage 存標記 (比較穩)
-    localStorage.setItem('google_auth_mode', 'login');
-    
-    // 跳轉
-    await auth.signInWithRedirect(provider);
-    
-  } catch (e) {
-    alert('無法啟動 Google 登入：' + e.message);
-    setLoading(false);
-    localStorage.removeItem('google_auth_mode');
-  }
-};
 
   // ========== 店長 Google 註冊（從註冊頁面觸發）==========
   const handleGoogleRegisterStart = async () => {
@@ -5535,18 +5473,6 @@ const handleGoogleLogin_Redirect = async () => {
                 <path fill="#EA4335" d="M12 5.38c1.62 0 3.06.56 4.21 1.64l3.15-3.15C17.45 2.09 14.97 1 12 1 7.7 1 3.99 3.47 2.18 7.07l3.66 2.84c.87-2.6 3.3-4.53 6.16-4.53z"/>
               </svg>
               Google 登入
-            </button>
-            {/* ▼▼▼ 這是新加的測試按鈕 ▼▼▼ */}
-            <button
-              type="button"
-              onClick={(e) => {
-                 e.preventDefault();
-                 handleGoogleLogin_Redirect(); // 呼叫新的函式
-              }}
-              disabled={loading}
-              className="w-full py-4 mt-4 bg-emerald-600 text-white font-bold rounded-xl shadow-lg hover:bg-emerald-500 transition-all active:scale-95 flex items-center justify-center gap-3"
-            >
-              🚀 Google 登入 (新版-跳轉測試)
             </button>
 
             <div className="text-center mt-4">
@@ -6846,111 +6772,75 @@ const handleLogout = async () => {
     window.XLSX.writeFile(wb, `bar_data_${shopId}.xlsx`);
   };
 
-// --- 修正後的 handleExcelImport (簡易版：只匯入基本資料，不處理連結，最安全) ---
-const handleExcelImport = (event) => {
-  const file = event.target.files[0];
-  if (!file) return;
-  
-  // 檢查是否有 XLSX 套件
-  if (!window.XLSX) {
-    alert('系統錯誤：Excel 套件未載入，請重新整理頁面。');
-    return;
-  }
-
-  const reader = new FileReader();
-  reader.onload = async (e) => {
-    try {
+  const handleExcelImport = (e) => {
+    const file = e.target.files[0];
+    if (!file) return;
+    if (!window.XLSX) return alert('Excel 套件尚未載入');
+    const reader = new FileReader();
+    reader.onload = async (e) => {
       const data = new Uint8Array(e.target.result);
       const workbook = window.XLSX.read(data, { type: 'array' });
-      
-      if (!window.firebase) return;
-      const db = window.firebase.firestore();
-      const batch = db.batch();
-      
-      let importedIngCount = 0;
-      let importedRecCount = 0;
-
-      // 1. 處理材料 (Ingredients) - 批量建立材料庫
-      if (workbook.Sheets['Ingredients']) {
-        const rawIngs = window.XLSX.utils.sheet_to_json(workbook.Sheets['Ingredients']);
-        
-        rawIngs.forEach((row) => {
-          if (!row.NameZh) return; // 沒名字就跳過
-          
-          // 如果 Excel 沒填 ID，系統自動產生新的 (避免覆蓋舊資料)
-          const newId = row.ID || generateId();
-          
-          const item = {
-            id: newId,
-            nameZh: row.NameZh.toString().trim(),
-            nameEn: row.NameEn || '',
-            type: row.Type || 'other',
-            subType: row.SubType || '',
-            price: Number(row.Price) || 0,
-            volume: Number(row.Volume) || 700,
-            abv: Number(row.ABV) || 0,
-            unit: 'ml', 
-            addToSingle: row.AddToSingle === 'Yes' || row.AddToSingle === 'yes',
-          };
-          
-          batch.set(
-            db.collection('shops').doc(shopId).collection('ingredients').doc(newId),
-            item
+      if (window.firebase) {
+        const db = window.firebase.firestore();
+        const batch = db.batch();
+        if (workbook.Sheets['Ingredients']) {
+          const rawIngs = window.XLSX.utils.sheet_to_json(
+            workbook.Sheets['Ingredients']
           );
-          importedIngCount++;
-        });
-      }
-
-      // 2. 處理酒譜 (Recipes) - 僅建立文字資料，不處理材料連結
-      if (workbook.Sheets['Recipes']) {
-        const rawRecs = window.XLSX.utils.sheet_to_json(workbook.Sheets['Recipes']);
-        
-        rawRecs.forEach((row) => {
-          if (!row.NameZh) return;
-
-          const newRecId = row.ID || generateId();
-
-          const item = {
-            id: newRecId,
-            nameZh: row.NameZh.toString().trim(),
-            nameEn: row.NameEn || '',
-            type: row.Type || 'classic',   // 預設分類
-            price: Number(row.Price) || 0, // 預設售價
-            
-            // 直接匯入文字描述
-            technique: row.Technique || 'Stir',
-            glass: row.Glass || 'Martini',
-            garnish: row.Garnish || '',
-            steps: row.Steps || '',        // 步驟/做法
-            flavorDescription: row.Flavor || '', // 風味描述
-            baseSpirit: row.Base || '',    // 基酒分類
-            
-            // ★ 關鍵：材料部分留白，讓您在手機上輕鬆點選
-            ingredients: [], 
-            tags: [],
-            targetCostRate: '', 
-          };
-
-          batch.set(
-            db.collection('shops').doc(shopId).collection('recipes').doc(newRecId),
-            item
+          rawIngs.forEach((row) => {
+            const item = {
+              id: row.ID || generateId(),
+              nameZh: row.NameZh,
+              nameEn: row.NameEn || '',
+              type: row.Type || 'other',
+              subType: row.SubType || '',
+              price: row.Price || 0,
+              volume: row.Volume || 700,
+              abv: row.ABV || 0,
+              unit: 'ml',
+              addToSingle: row.AddToSingle === 'Yes',
+            };
+            batch.set(
+              db
+                .collection('shops')
+                .doc(shopId)
+                .collection('ingredients')
+                .doc(item.id),
+              item
+            );
+          });
+        }
+        if (workbook.Sheets['Recipes']) {
+          const rawRecs = window.XLSX.utils.sheet_to_json(
+            workbook.Sheets['Recipes']
           );
-          importedRecCount++;
-        });
+          rawRecs.forEach((row) => {
+            const item = {
+              id: row.ID || generateId(),
+              nameZh: row.NameZh,
+              nameEn: row.NameEn || '',
+              type: row.Type || 'classic',
+              price: row.Price || 0,
+              baseSpirit: row.Base || '',
+              ingredients: [],
+              tags: [],
+            };
+            batch.set(
+              db
+                .collection('shops')
+                .doc(shopId)
+                .collection('recipes')
+                .doc(item.id),
+              item
+            );
+          });
+        }
+        await batch.commit();
+        showAlert('成功', 'Excel 資料已匯入雲端');
       }
-
-      // 3. 一次性送出所有資料
-      await batch.commit();
-      
-      alert(`匯入成功！\n\n已新增：\n- ${importedIngCount} 項材料\n- ${importedRecCount} 款酒譜 (基本資料)`);
-
-    } catch (err) {
-      console.error('Excel Import Error:', err);
-      alert('匯入失敗，請檢查 Excel 格式。\n錯誤訊息: ' + err.message);
-    }
+    };
+    reader.readAsArrayBuffer(file);
   };
-  reader.readAsArrayBuffer(file);
-};
 
   const handleBatchAddIngredients = async (newItems) => {
     if (window.firebase) {
