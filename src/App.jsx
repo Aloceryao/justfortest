@@ -419,7 +419,7 @@ const safeString = (str) => (str || '').toString();
 // ==========================================
 // ★ 版本號設定 (修改這裡會同步更新登入頁與設定頁)
 // ==========================================
-const APP_VERSION = 'v16.10.7 (登入測試完整版)';
+const APP_VERSION = 'v16.10.8 (批量增加版)';
 const safeNumber = (num) => {
   const n = parseFloat(num);
   return isNaN(n) ? 0 : n;
@@ -6772,75 +6772,111 @@ const handleLogout = async () => {
     window.XLSX.writeFile(wb, `bar_data_${shopId}.xlsx`);
   };
 
-  const handleExcelImport = (e) => {
-    const file = e.target.files[0];
-    if (!file) return;
-    if (!window.XLSX) return alert('Excel 套件尚未載入');
-    const reader = new FileReader();
-    reader.onload = async (e) => {
+// --- 修正後的 handleExcelImport (簡易版：只匯入基本資料，不處理連結，最安全) ---
+const handleExcelImport = (event) => {
+  const file = event.target.files[0];
+  if (!file) return;
+  
+  // 檢查是否有 XLSX 套件
+  if (!window.XLSX) {
+    alert('系統錯誤：Excel 套件未載入，請重新整理頁面。');
+    return;
+  }
+
+  const reader = new FileReader();
+  reader.onload = async (e) => {
+    try {
       const data = new Uint8Array(e.target.result);
       const workbook = window.XLSX.read(data, { type: 'array' });
-      if (window.firebase) {
-        const db = window.firebase.firestore();
-        const batch = db.batch();
-        if (workbook.Sheets['Ingredients']) {
-          const rawIngs = window.XLSX.utils.sheet_to_json(
-            workbook.Sheets['Ingredients']
+      
+      if (!window.firebase) return;
+      const db = window.firebase.firestore();
+      const batch = db.batch();
+      
+      let importedIngCount = 0;
+      let importedRecCount = 0;
+
+      // 1. 處理材料 (Ingredients) - 批量建立材料庫
+      if (workbook.Sheets['Ingredients']) {
+        const rawIngs = window.XLSX.utils.sheet_to_json(workbook.Sheets['Ingredients']);
+        
+        rawIngs.forEach((row) => {
+          if (!row.NameZh) return; // 沒名字就跳過
+          
+          // 如果 Excel 沒填 ID，系統自動產生新的 (避免覆蓋舊資料)
+          const newId = row.ID || generateId();
+          
+          const item = {
+            id: newId,
+            nameZh: row.NameZh.toString().trim(),
+            nameEn: row.NameEn || '',
+            type: row.Type || 'other',
+            subType: row.SubType || '',
+            price: Number(row.Price) || 0,
+            volume: Number(row.Volume) || 700,
+            abv: Number(row.ABV) || 0,
+            unit: 'ml', 
+            addToSingle: row.AddToSingle === 'Yes' || row.AddToSingle === 'yes',
+          };
+          
+          batch.set(
+            db.collection('shops').doc(shopId).collection('ingredients').doc(newId),
+            item
           );
-          rawIngs.forEach((row) => {
-            const item = {
-              id: row.ID || generateId(),
-              nameZh: row.NameZh,
-              nameEn: row.NameEn || '',
-              type: row.Type || 'other',
-              subType: row.SubType || '',
-              price: row.Price || 0,
-              volume: row.Volume || 700,
-              abv: row.ABV || 0,
-              unit: 'ml',
-              addToSingle: row.AddToSingle === 'Yes',
-            };
-            batch.set(
-              db
-                .collection('shops')
-                .doc(shopId)
-                .collection('ingredients')
-                .doc(item.id),
-              item
-            );
-          });
-        }
-        if (workbook.Sheets['Recipes']) {
-          const rawRecs = window.XLSX.utils.sheet_to_json(
-            workbook.Sheets['Recipes']
-          );
-          rawRecs.forEach((row) => {
-            const item = {
-              id: row.ID || generateId(),
-              nameZh: row.NameZh,
-              nameEn: row.NameEn || '',
-              type: row.Type || 'classic',
-              price: row.Price || 0,
-              baseSpirit: row.Base || '',
-              ingredients: [],
-              tags: [],
-            };
-            batch.set(
-              db
-                .collection('shops')
-                .doc(shopId)
-                .collection('recipes')
-                .doc(item.id),
-              item
-            );
-          });
-        }
-        await batch.commit();
-        showAlert('成功', 'Excel 資料已匯入雲端');
+          importedIngCount++;
+        });
       }
-    };
-    reader.readAsArrayBuffer(file);
+
+      // 2. 處理酒譜 (Recipes) - 僅建立文字資料，不處理材料連結
+      if (workbook.Sheets['Recipes']) {
+        const rawRecs = window.XLSX.utils.sheet_to_json(workbook.Sheets['Recipes']);
+        
+        rawRecs.forEach((row) => {
+          if (!row.NameZh) return;
+
+          const newRecId = row.ID || generateId();
+
+          const item = {
+            id: newRecId,
+            nameZh: row.NameZh.toString().trim(),
+            nameEn: row.NameEn || '',
+            type: row.Type || 'classic',   // 預設分類
+            price: Number(row.Price) || 0, // 預設售價
+            
+            // 直接匯入文字描述
+            technique: row.Technique || 'Stir',
+            glass: row.Glass || 'Martini',
+            garnish: row.Garnish || '',
+            steps: row.Steps || '',        // 步驟/做法
+            flavorDescription: row.Flavor || '', // 風味描述
+            baseSpirit: row.Base || '',    // 基酒分類
+            
+            // ★ 關鍵：材料部分留白，讓您在手機上輕鬆點選
+            ingredients: [], 
+            tags: [],
+            targetCostRate: '', 
+          };
+
+          batch.set(
+            db.collection('shops').doc(shopId).collection('recipes').doc(newRecId),
+            item
+          );
+          importedRecCount++;
+        });
+      }
+
+      // 3. 一次性送出所有資料
+      await batch.commit();
+      
+      alert(`匯入成功！\n\n已新增：\n- ${importedIngCount} 項材料\n- ${importedRecCount} 款酒譜 (基本資料)`);
+
+    } catch (err) {
+      console.error('Excel Import Error:', err);
+      alert('匯入失敗，請檢查 Excel 格式。\n錯誤訊息: ' + err.message);
+    }
   };
+  reader.readAsArrayBuffer(file);
+};
 
   const handleBatchAddIngredients = async (newItems) => {
     if (window.firebase) {
