@@ -424,12 +424,47 @@ const safeString = (str) => (str || '').toString();
 // ==========================================
 // ★ 版本號設定 (修改這裡會同步更新登入頁與設定頁)
 // ==========================================
-const APP_VERSION = 'v16.10.712 (登入測試完整版)';
+const APP_VERSION = 'v17.0 ';
 // ==========================================
 // Auth Feature Flag
 // ==========================================
 // Google 登入/註冊目前不穩定：先停用並隱藏 UI，只保留 Email 流程
 const ENABLE_GOOGLE_AUTH = false;
+
+// ==========================================
+// Local Storage Keys (穩定名稱 + 向下相容搬家)
+// ==========================================
+const STORAGE_KEYS = {
+  gridCats: 'bar_grid_cats',
+  ingredientCategories: 'bar_ingredient_categories',
+  categorySubItems: 'bar_category_subitems',
+  foodCategories: 'bar_food_categories',
+};
+
+const readJSONStorage = (key) => {
+  try {
+    const raw = localStorage.getItem(key);
+    return raw ? JSON.parse(raw) : null;
+  } catch (e) {
+    return null;
+  }
+};
+
+const migrateStorage = (newKey, legacyKeys = []) => {
+  const existing = readJSONStorage(newKey);
+  if (existing !== null && existing !== undefined) return existing;
+  for (const oldKey of legacyKeys) {
+    const data = readJSONStorage(oldKey);
+    if (data !== null && data !== undefined) {
+      try {
+        localStorage.setItem(newKey, JSON.stringify(data));
+      } catch (e) {}
+      return data;
+    }
+  }
+  return null;
+};
+
 const safeNumber = (num) => {
   const n = parseFloat(num);
   return isNaN(n) ? 0 : n;
@@ -1523,8 +1558,6 @@ const RecipeListScreen = ({
   ingredients,
   searchTerm,
   setSearchTerm,
-  recipeCategoryFilter,
-  setRecipeCategoryFilter,
   startEdit,
   setViewingItem,
   availableTags,
@@ -1539,6 +1572,8 @@ const RecipeListScreen = ({
   // ★★★ 請補上這一個 (記得加逗號) ★★★
   onUpdateGridCategory,
 }) => {
+  // 酒譜頁自己的分類分頁狀態（作法 B：不跟其他頁面共用）
+  const [recipeCategoryFilter, setRecipeCategoryFilter] = useState('all');
   const [filterBases, setFilterBases] = useState([]);
   const [filterTags, setFilterTags] = useState([]);
   const [showFilters, setShowFilters] = useState(false);
@@ -6015,7 +6050,11 @@ function MainAppContent() {
   const [viewingItem, setViewingItem] = useState(null);
 
   const [searchTerm, setSearchTerm] = useState('');
-  const [recipeCategoryFilter, setRecipeCategoryFilter] = useState('all');
+
+  // 切換主分頁時清空搜尋（避免跨頁殘留造成困惑）
+  useEffect(() => {
+    setSearchTerm('');
+  }, [activeTab]);
 
   const [availableTags, setAvailableTags] = useState([
     '酸甜 Sour/Sweet',
@@ -6060,8 +6099,11 @@ function MainAppContent() {
 
   const [categorySubItems, setCategorySubItems] = useState(() => {
     try {
-      const saved = localStorage.getItem('bar_category_subitems_v1');
-      if (saved) return JSON.parse(saved);
+      const migrated =
+        migrateStorage(STORAGE_KEYS.categorySubItems, [
+          'bar_category_subitems_v1',
+        ]) || readJSONStorage('bar_category_subitems_v1');
+      if (migrated) return migrated;
 
       return {
         alcohol: DEFAULT_BASE_SPIRITS,
@@ -6080,6 +6122,10 @@ function MainAppContent() {
   });
 
   useEffect(() => {
+    localStorage.setItem(
+      STORAGE_KEYS.categorySubItems,
+      JSON.stringify(categorySubItems)
+    );
     localStorage.setItem(
       'bar_category_subitems_v1',
       JSON.stringify(categorySubItems)
@@ -6134,9 +6180,11 @@ function MainAppContent() {
 
   const [foodCategories, setFoodCategories] = useState(() => {
     try {
-      const saved = localStorage.getItem('bar_food_categories_v1');
-      return saved
-        ? JSON.parse(saved)
+      const migrated =
+        migrateStorage(STORAGE_KEYS.foodCategories, ['bar_food_categories_v1']) ||
+        readJSONStorage('bar_food_categories_v1');
+      return migrated
+        ? migrated
         : [
             { id: 'main', label: '主食' },
             { id: 'fried', label: '炸物' },
@@ -6151,17 +6199,18 @@ function MainAppContent() {
   });
 
   useEffect(() => {
-    localStorage.setItem(
-      'bar_food_categories_v1',
-      JSON.stringify(foodCategories)
-    );
+    // 新舊 key 雙寫入，避免未來版本切換造成“消失”
+    localStorage.setItem(STORAGE_KEYS.foodCategories, JSON.stringify(foodCategories));
+    localStorage.setItem('bar_food_categories_v1', JSON.stringify(foodCategories));
   }, [foodCategories]);
 
   // ★ 新增：將 Grid Categories (方塊) 的狀態提升到這裡管理
   const [gridCategories, setGridCategories] = useState(() => {
     try {
-      const saved = localStorage.getItem('bar_grid_cats_v9');
-      if (saved) return JSON.parse(saved);
+      const migrated =
+        migrateStorage(STORAGE_KEYS.gridCats, ['bar_grid_cats_v9']) ||
+        readJSONStorage('bar_grid_cats_v9');
+      if (migrated) return migrated;
     } catch (e) {}
     // 預設值
     return [
@@ -6176,12 +6225,14 @@ function MainAppContent() {
   });
 
   useEffect(() => {
+    localStorage.setItem(STORAGE_KEYS.gridCats, JSON.stringify(gridCategories));
     localStorage.setItem('bar_grid_cats_v9', JSON.stringify(gridCategories));
   }, [gridCategories]);
 
   // ★ 新增：同步存檔函式
   const saveGridToCloud = (newCats) => {
     setGridCategories(newCats);
+    localStorage.setItem(STORAGE_KEYS.gridCats, JSON.stringify(newCats));
     localStorage.setItem('bar_grid_cats_v9', JSON.stringify(newCats));
 
     if (window.firebase && shopId) {
@@ -6222,9 +6273,12 @@ function MainAppContent() {
   // ★ 修改：加入讀取與儲存功能，讓大分類不會重整後消失
   const [ingCategories, setIngCategories] = useState(() => {
     try {
-      const saved = localStorage.getItem('bar_ingredient_categories_v1');
-      return saved
-        ? JSON.parse(saved)
+      const migrated =
+        migrateStorage(STORAGE_KEYS.ingredientCategories, [
+          'bar_ingredient_categories_v1',
+        ]) || readJSONStorage('bar_ingredient_categories_v1');
+      return migrated
+        ? migrated
         : [
             { id: 'alcohol', label: '基酒 Alcohol' },
             { id: 'soft', label: '軟性飲料 Soft' },
@@ -6241,10 +6295,17 @@ function MainAppContent() {
 
   useEffect(() => {
     localStorage.setItem(
+      STORAGE_KEYS.ingredientCategories,
+      JSON.stringify(ingCategories)
+    );
+    localStorage.setItem(
       'bar_ingredient_categories_v1',
       JSON.stringify(ingCategories)
     );
   }, [ingCategories]);
+
+  // 防止 config onSnapshot 與自動同步之間反覆寫入
+  const lastSettingsSyncRef = useRef('');
 
   const [dialog, setDialog] = useState({
     isOpen: false,
@@ -6417,6 +6478,27 @@ function MainAppContent() {
                 setCurrentShopName(shopId);
                 setNewShopNameInput(shopId);
               }
+
+              // 載入「材料大分類 / 子分類」設定（讓更新/換裝置不會消失）
+              const nextIngCats = Array.isArray(data.ingredientCategories)
+                ? data.ingredientCategories
+                : null;
+              const nextSubItems =
+                data.categorySubItems && typeof data.categorySubItems === 'object'
+                  ? data.categorySubItems
+                  : null;
+
+              if (nextIngCats || nextSubItems) {
+                try {
+                  lastSettingsSyncRef.current = JSON.stringify({
+                    ingredientCategories: nextIngCats || ingCategories,
+                    categorySubItems: nextSubItems || categorySubItems,
+                  });
+                } catch (e) {}
+              }
+
+              if (nextIngCats) setIngCategories(nextIngCats);
+              if (nextSubItems) setCategorySubItems(nextSubItems);
             } else {
               // 文件不存在，使用 shopId 作為預設名稱
               setCurrentShopName(shopId);
@@ -6443,7 +6525,14 @@ function MainAppContent() {
         (doc) => {
           if (doc.exists && doc.data().categories) {
             setGridCategories(doc.data().categories);
-            localStorage.setItem('bar_grid_cats_v9', JSON.stringify(doc.data().categories));
+            localStorage.setItem(
+              STORAGE_KEYS.gridCats,
+              JSON.stringify(doc.data().categories)
+            );
+            localStorage.setItem(
+              'bar_grid_cats_v9',
+              JSON.stringify(doc.data().categories)
+            );
           }
         },
         (error) => console.error('Grid config error:', error)
@@ -6473,6 +6562,43 @@ function MainAppContent() {
       }
     }
   }, [shopId, isLoggedIn, firebaseReady]);
+
+  // 只有店長/主管才會把「分類設定」寫回雲端，避免客人模式把預設值覆蓋掉
+  useEffect(() => {
+    const canManageSettings = userRole === 'owner' || userRole === 'manager';
+    if (!canManageSettings) return;
+    if (!firebaseReady || !isLoggedIn || !shopId || !window.firebase) return;
+
+    const payload = {
+      ingredientCategories: ingCategories,
+      categorySubItems: categorySubItems,
+    };
+
+    let json = '';
+    try {
+      json = JSON.stringify(payload);
+    } catch (e) {
+      return;
+    }
+    if (json === lastSettingsSyncRef.current) return;
+    lastSettingsSyncRef.current = json;
+
+    window.firebase
+      .firestore()
+      .collection('shops')
+      .doc(shopId)
+      .collection('settings')
+      .doc('config')
+      .set(payload, { merge: true })
+      .catch((e) => console.error('Settings sync error:', e));
+  }, [
+    firebaseReady,
+    isLoggedIn,
+    shopId,
+    userRole,
+    ingCategories,
+    categorySubItems,
+  ]);
 
   const handleLogin = (sid, role) => {
     console.log('[handleLogin] ========== 開始 ==========');
@@ -7126,8 +7252,6 @@ const handleLogout = async () => {
             ingredients={ingredients}
             searchTerm={searchTerm}
             setSearchTerm={setSearchTerm}
-            recipeCategoryFilter={recipeCategoryFilter}
-            setRecipeCategoryFilter={setRecipeCategoryFilter}
             startEdit={startEdit}
             setViewingItem={setViewingItem}
             availableTags={availableTags}
