@@ -424,7 +424,7 @@ const safeString = (str) => (str || '').toString();
 // ==========================================
 // ★ 版本號設定 (修改這裡會同步更新登入頁與設定頁)
 // ==========================================
-const APP_VERSION = 'v17.0 ';
+const APP_VERSION = 'v17.1(登入測試完整版)';
 // ==========================================
 // Auth Feature Flag
 // ==========================================
@@ -435,7 +435,10 @@ const ENABLE_GOOGLE_AUTH = false;
 // Local Storage Keys (穩定名稱 + 向下相容搬家)
 // ==========================================
 const STORAGE_KEYS = {
+  // legacy: 單一陣列版本（舊版）
   gridCats: 'bar_grid_cats',
+  // v2: 依酒譜分頁存三份（classic/signature/single）
+  gridCatsByTab: 'bar_grid_cats_by_tab',
   ingredientCategories: 'bar_ingredient_categories',
   categorySubItems: 'bar_category_subitems',
   foodCategories: 'bar_food_categories',
@@ -463,6 +466,30 @@ const migrateStorage = (newKey, legacyKeys = []) => {
     }
   }
   return null;
+};
+
+const normalizeGridCatsByTab = (raw, defaultList = []) => {
+  const cloneList = (list) =>
+    (Array.isArray(list) ? list : []).filter(Boolean).map((x) => ({ ...x }));
+
+  // 舊版：單一 array → 複製成三份
+  if (Array.isArray(raw)) {
+    const list = cloneList(raw);
+    return { classic: list, signature: cloneList(list), single: cloneList(list) };
+  }
+
+  // 新版：object
+  if (raw && typeof raw === 'object') {
+    return {
+      classic: cloneList(raw.classic ?? raw.categories ?? defaultList),
+      signature: cloneList(raw.signature ?? raw.categories ?? defaultList),
+      single: cloneList(raw.single ?? raw.categories ?? defaultList),
+    };
+  }
+
+  // 預設
+  const list = cloneList(defaultList);
+  return { classic: list, signature: cloneList(list), single: cloneList(list) };
 };
 
 const safeNumber = (num) => {
@@ -1566,10 +1593,9 @@ const RecipeListScreen = ({
   onUnlock,
   ingCategories,
   // ★ 新增接收的參數
-  gridCategories,
+  gridCategoriesByTab,
   onAddGridCategory,
   onDeleteGridCategory,
-  // ★★★ 請補上這一個 (記得加逗號) ★★★
   onUpdateGridCategory,
 }) => {
   // 酒譜頁自己的分類分頁狀態（作法 B：不跟其他頁面共用）
@@ -1577,9 +1603,14 @@ const RecipeListScreen = ({
   const [filterBases, setFilterBases] = useState([]);
   const [filterTags, setFilterTags] = useState([]);
   const [showFilters, setShowFilters] = useState(false);
+  const getGridTabKey = (k) =>
+    ['classic', 'signature', 'single'].includes(k) ? k : 'classic';
+  const gridTabKey = getGridTabKey(recipeCategoryFilter);
+  const getActiveGridStorageKey = (k) => `bar_active_grid_${k}_v1`;
+
   const [activeBlock, setActiveBlock] = useState(() => {
     try {
-      const saved = localStorage.getItem('bar_active_grid_v1');
+      const saved = localStorage.getItem(getActiveGridStorageKey('classic'));
       return saved ? JSON.parse(saved) : null;
     } catch {
       return null;
@@ -1611,16 +1642,33 @@ const RecipeListScreen = ({
   };
 
   useEffect(() => {
-    if (activeBlock)
-      localStorage.setItem('bar_active_grid_v1', JSON.stringify(activeBlock));
-    else localStorage.removeItem('bar_active_grid_v1');
-  }, [activeBlock]);
+    // 分頁獨立保存 activeBlock，避免經典/特調/單品互相影響
+    const key = getActiveGridStorageKey(gridTabKey);
+    if (activeBlock) localStorage.setItem(key, JSON.stringify(activeBlock));
+    else localStorage.removeItem(key);
+  }, [activeBlock, gridTabKey]);
+
+  useEffect(() => {
+    // 切換經典/特調/單品時，載入該分頁自己的 activeBlock，並清空基酒/風味篩選避免殘留
+    try {
+      const saved = localStorage.getItem(getActiveGridStorageKey(gridTabKey));
+      setActiveBlock(saved ? JSON.parse(saved) : null);
+    } catch {
+      setActiveBlock(null);
+    }
+    setFilterBases([]);
+    setFilterTags([]);
+    setShowFilters(false);
+    setIsGridEditing(false);
+  }, [gridTabKey]);
   useEffect(() => {
     if (searchTerm) setActiveBlock(null);
   }, [searchTerm]);
 
   const showGrid =
     !searchTerm && !activeBlock && recipeCategoryFilter !== 'all';
+
+  const gridCategories = gridCategoriesByTab?.[gridTabKey] || [];
 
   // ★ 二度修改：只顯示「目前還存在的大分類」底下的小標籤 (自動過濾掉已刪除分類的殘留標籤)
   const allSubTypes = useMemo(() => {
@@ -1836,19 +1884,17 @@ const RecipeListScreen = ({
       <div className="flex-1 overflow-y-auto custom-scrollbar">
         {showGrid ? (
          <CategoryGrid
-         categories={gridCategories}
-         onSelect={handleBlockSelect}
-         // ▼▼▼ 修改重點在這裡 ▼▼▼
-         onAdd={() => {
-           setEditingBlockData(null); // 先清空舊資料 (這步很重要！)
-           setShowCatModal(true);     // 再打開視窗
-         }}
-         // ▲▲▲ 修改結束 ▲▲▲
-         onDelete={onDeleteGridCategory}
-         isEditing={isGridEditing}
-         toggleEditing={() => setIsGridEditing(!isGridEditing)}
-         role={userRole}
-       />
+           categories={gridCategories}
+           onSelect={handleBlockSelect}
+           onAdd={() => {
+             setEditingBlockData(null); // 先清空舊資料 (這步很重要！)
+             setShowCatModal(true);     // 再打開視窗
+           }}
+           onDelete={(id) => onDeleteGridCategory(gridTabKey, id)}
+           isEditing={isGridEditing}
+           toggleEditing={() => setIsGridEditing(!isGridEditing)}
+           role={userRole}
+         />
         ) : (
           <div className="p-4 space-y-4 pb-32">
             {activeBlock && (
@@ -1903,9 +1949,9 @@ const RecipeListScreen = ({
         }}
         onSave={(data) => {
           if (editingBlockData) {
-            onUpdateGridCategory(data); // 如果有舊資料，就是更新
+            onUpdateGridCategory(gridTabKey, data); // 如果有舊資料，就是更新
           } else {
-            onAddGridCategory(data);    // 否則就是新增
+            onAddGridCategory(gridTabKey, data);    // 否則就是新增
           }
         }}
         availableBases={allSubTypes}
@@ -2507,6 +2553,10 @@ const InventoryScreen = ({
 
   // 處理新增子分類
   const handleAddNewSubCat = () => {
+    if (categoryFilter === 'all') {
+      alert('請先選擇一個「大分類」後，才能新增小分類。');
+      return;
+    }
     if (newSubCatName.trim() && onAddSubCategory) {
       onAddSubCategory(categoryFilter, newSubCatName.trim());
       setNewSubCatName('');
@@ -3383,7 +3433,8 @@ const EditorSheet = ({
         setItem({ ...item, baseSpirit: val });
         // 呼叫主程式傳進來的功能，自動建立方塊
         if (addingItem === 'base' && onAutoCreateGridBlock) {
-          onAutoCreateGridBlock(val);
+          // 依酒譜類型（classic/signature/single）把方塊加到對應分頁；未知則落到 classic
+          onAutoCreateGridBlock(val, item.type);
         }
       }
     }
@@ -6157,9 +6208,14 @@ function MainAppContent() {
   };
 
   // ★ 新增：當編輯酒譜新增基酒時，自動建立首頁的快速篩選方塊
-  const handleAutoCreateGridBlock = (newBaseName) => {
+  const handleAutoCreateGridBlock = (newBaseName, tabKey) => {
+    const key = ['classic', 'signature', 'single'].includes(tabKey)
+      ? tabKey
+      : 'classic';
+
+    const current = gridCategoriesByTab?.[key] || [];
     // 1. 檢查是否已經有這個方塊了 (避免重複)
-    const exists = gridCategories.find(
+    const exists = current.find(
       (c) => c.targetBase === newBaseName || c.nameZh === newBaseName
     );
     if (exists) return;
@@ -6174,8 +6230,9 @@ function MainAppContent() {
       targetBase: newBaseName, // 設定篩選目標
     };
 
-    // 3. 更新狀態並存入 LocalStorage (透過 useEffect)
-    setGridCategories([...gridCategories, newBlock]);
+    // 3. 更新狀態並同步（依分頁獨立）
+    const updatedByTab = { ...gridCategoriesByTab, [key]: [...current, newBlock] };
+    saveGridToCloud(updatedByTab);
   };
 
   const [foodCategories, setFoodCategories] = useState(() => {
@@ -6204,16 +6261,9 @@ function MainAppContent() {
     localStorage.setItem('bar_food_categories_v1', JSON.stringify(foodCategories));
   }, [foodCategories]);
 
-  // ★ 新增：將 Grid Categories (方塊) 的狀態提升到這裡管理
-  const [gridCategories, setGridCategories] = useState(() => {
-    try {
-      const migrated =
-        migrateStorage(STORAGE_KEYS.gridCats, ['bar_grid_cats_v9']) ||
-        readJSONStorage('bar_grid_cats_v9');
-      if (migrated) return migrated;
-    } catch (e) {}
-    // 預設值
-    return [
+  // ★ Grid Categories (方塊) 依酒譜分頁獨立：classic / signature / single
+  const DEFAULT_GRID_CATS = useMemo(
+    () => [
       { id: 'gin', nameZh: 'Gin', nameEn: '琴酒', iconType: 'martini', gradient: 'from-blue-600 to-indigo-700', targetBase: 'Gin 琴酒' },
       { id: 'whisky', nameZh: 'Whisky', nameEn: '威士忌', iconType: 'whisky', gradient: 'from-amber-600 to-orange-700', targetBase: 'Whisky 威士忌' },
       { id: 'rum', nameZh: 'Rum', nameEn: '蘭姆酒', iconType: 'highball', gradient: 'from-rose-600 to-pink-700', targetBase: 'Rum 蘭姆酒' },
@@ -6221,32 +6271,64 @@ function MainAppContent() {
       { id: 'vodka', nameZh: 'Vodka', nameEn: '伏特加', iconType: 'martini', gradient: 'from-cyan-600 to-blue-700', targetBase: 'Vodka 伏特加' },
       { id: 'brandy', nameZh: 'Brandy', nameEn: '白蘭地', iconType: 'snifter', gradient: 'from-purple-600 to-violet-700', targetBase: 'Brandy 白蘭地' },
       { id: 'soft', nameZh: '軟飲', nameEn: 'Soft Drink', iconType: 'soft', gradient: 'from-teal-600 to-emerald-700', targetBase: 'TYPE_SOFT' },
-    ];
+    ],
+    []
+  );
+
+  const [gridCategoriesByTab, setGridCategoriesByTab] = useState(() => {
+    // 新版優先：object
+    const rawNew =
+      migrateStorage(STORAGE_KEYS.gridCatsByTab, [
+        STORAGE_KEYS.gridCats,
+        'bar_grid_cats_v9',
+      ]) || readJSONStorage(STORAGE_KEYS.gridCatsByTab);
+
+    // 舊版：array
+    const rawLegacy =
+      readJSONStorage(STORAGE_KEYS.gridCats) || readJSONStorage('bar_grid_cats_v9');
+
+    const raw = rawNew ?? rawLegacy;
+    return normalizeGridCatsByTab(raw, DEFAULT_GRID_CATS);
   });
 
   useEffect(() => {
-    localStorage.setItem(STORAGE_KEYS.gridCats, JSON.stringify(gridCategories));
-    localStorage.setItem('bar_grid_cats_v9', JSON.stringify(gridCategories));
-  }, [gridCategories]);
+    // 新版：依分頁存
+    localStorage.setItem(
+      STORAGE_KEYS.gridCatsByTab,
+      JSON.stringify(gridCategoriesByTab)
+    );
+    // 向下相容：舊版只支援單一陣列，使用 classic
+    const legacyArray = gridCategoriesByTab?.classic || [];
+    localStorage.setItem(STORAGE_KEYS.gridCats, JSON.stringify(legacyArray));
+    localStorage.setItem('bar_grid_cats_v9', JSON.stringify(legacyArray));
+  }, [gridCategoriesByTab]);
 
-  // ★ 新增：同步存檔函式
-  const saveGridToCloud = (newCats) => {
-    setGridCategories(newCats);
-    localStorage.setItem(STORAGE_KEYS.gridCats, JSON.stringify(newCats));
-    localStorage.setItem('bar_grid_cats_v9', JSON.stringify(newCats));
+  const saveGridToCloud = (newByTab) => {
+    setGridCategoriesByTab(newByTab);
+    localStorage.setItem(STORAGE_KEYS.gridCatsByTab, JSON.stringify(newByTab));
+
+    // 舊版相容欄位：categories
+    const legacyArray = newByTab?.classic || [];
+    localStorage.setItem(STORAGE_KEYS.gridCats, JSON.stringify(legacyArray));
+    localStorage.setItem('bar_grid_cats_v9', JSON.stringify(legacyArray));
 
     if (window.firebase && shopId) {
-      window.firebase.firestore()
+      window.firebase
+        .firestore()
         .collection('shops')
         .doc(shopId)
         .collection('settings')
         .doc('grid_config')
-        .set({ categories: newCats }, { merge: true })
-        .catch(err => console.error("方塊同步失敗:", err));
+        .set({ categoriesByTab: newByTab, categories: legacyArray }, { merge: true })
+        .catch((err) => console.error('方塊同步失敗:', err));
     }
   };
 
-  const handleAddGridCategory = (newCat) => {
+  const normalizeGridTabKey = (k) =>
+    ['classic', 'signature', 'single'].includes(k) ? k : 'classic';
+
+  const handleAddGridCategory = (tabKey, newCat) => {
+    const key = normalizeGridTabKey(tabKey);
     // 自動判斷是否為軟飲
     if (!newCat.targetBase) {
       if (newCat.nameZh.includes('軟') || newCat.nameEn.toLowerCase().includes('soft')) {
@@ -6254,21 +6336,31 @@ function MainAppContent() {
         newCat.iconType = 'soft';
       }
     }
-    // ★ 改用 saveGridToCloud
-    const updated = [...gridCategories, newCat];
-    saveGridToCloud(updated);
+    const current = (gridCategoriesByTab?.[key] || []).slice();
+    const updatedByTab = { ...gridCategoriesByTab, [key]: [...current, newCat] };
+    saveGridToCloud(updatedByTab);
   };
 
-  const handleDeleteGridCategory = (id) => {
+  const handleDeleteGridCategory = (tabKey, id) => {
+    const key = normalizeGridTabKey(tabKey);
     if (confirm(`確定移除此方塊嗎？`)) {
-      const updated = gridCategories.filter((c) => c.id !== id);
-      saveGridToCloud(updated);
+      const current = gridCategoriesByTab?.[key] || [];
+      const updatedByTab = {
+        ...gridCategoriesByTab,
+        [key]: current.filter((c) => c.id !== id),
+      };
+      saveGridToCloud(updatedByTab);
     }
   };
 
-  const handleUpdateGridCategory = (updatedCat) => {
-    const updated = gridCategories.map((cat) => (cat.id === updatedCat.id ? updatedCat : cat));
-    saveGridToCloud(updated);
+  const handleUpdateGridCategory = (tabKey, updatedCat) => {
+    const key = normalizeGridTabKey(tabKey);
+    const current = gridCategoriesByTab?.[key] || [];
+    const updatedByTab = {
+      ...gridCategoriesByTab,
+      [key]: current.map((cat) => (cat.id === updatedCat.id ? updatedCat : cat)),
+    };
+    saveGridToCloud(updatedByTab);
   };
   // ★ 修改：加入讀取與儲存功能，讓大分類不會重整後消失
   const [ingCategories, setIngCategories] = useState(() => {
@@ -6314,6 +6406,31 @@ function MainAppContent() {
     message: '',
     onConfirm: null,
   });
+
+  // 重要：店員/資深員工登入流程目前不會登入 Firebase Auth，
+  // 但 firestore.rules 對 shops/* 寫入要求 request.auth != null。
+  // 這會導致「新增方塊/新增子分類」看似成功但無法寫入雲端，重整後被舊資料覆蓋。
+  // 解法：在非客人模式且尚未登入 auth 時，自動用匿名登入取得 request.auth。
+  useEffect(() => {
+    const roleNeedsWrite =
+      userRole === 'owner' || userRole === 'manager' || userRole === 'staff';
+    if (!roleNeedsWrite) return;
+    if (!firebaseReady || !isLoggedIn || !shopId || !window.firebase) return;
+
+    const auth = window.firebase.auth?.();
+    if (!auth) return;
+    if (auth.currentUser) return;
+
+    auth
+      .signInAnonymously()
+      .then(() => {
+        console.log('[Auth] 已以匿名模式登入，啟用雲端寫入權限');
+      })
+      .catch((e) => {
+        console.error('[Auth] 匿名登入失敗：', e);
+        // 若 Firebase Console 未啟用 Anonymous Provider，這裡會失敗
+      });
+  }, [firebaseReady, isLoggedIn, shopId, userRole]);
 
   useEffect(() => {
     console.log('[App Init] ========== MainAppContent 初始化 ==========');
@@ -6523,17 +6640,24 @@ function MainAppContent() {
       .doc('grid_config')
       .onSnapshot(
         (doc) => {
-          if (doc.exists && doc.data().categories) {
-            setGridCategories(doc.data().categories);
-            localStorage.setItem(
-              STORAGE_KEYS.gridCats,
-              JSON.stringify(doc.data().categories)
-            );
-            localStorage.setItem(
-              'bar_grid_cats_v9',
-              JSON.stringify(doc.data().categories)
-            );
-          }
+          if (!doc.exists) return;
+          const data = doc.data() || {};
+          const raw = data.categoriesByTab ?? data.categories ?? null;
+          const normalized = normalizeGridCatsByTab(raw, DEFAULT_GRID_CATS);
+          setGridCategoriesByTab(normalized);
+          // 本機快取（新舊雙寫）
+          localStorage.setItem(
+            STORAGE_KEYS.gridCatsByTab,
+            JSON.stringify(normalized)
+          );
+          localStorage.setItem(
+            STORAGE_KEYS.gridCats,
+            JSON.stringify(normalized.classic || [])
+          );
+          localStorage.setItem(
+            'bar_grid_cats_v9',
+            JSON.stringify(normalized.classic || [])
+          );
         },
         (error) => console.error('Grid config error:', error)
       );
@@ -7261,11 +7385,10 @@ const handleLogout = async () => {
             isConsumerMode={!canEdit}
             onUnlock={handleUnlockRequest}
             ingCategories={ingCategories}
-            // ★ 新增：將方塊資料傳入首頁
-            gridCategories={gridCategories} 
+            // ★ 方塊：依經典/特調/單品 分頁獨立
+            gridCategoriesByTab={gridCategoriesByTab}
             onAddGridCategory={handleAddGridCategory}
             onDeleteGridCategory={handleDeleteGridCategory}
-            // ★★★ 請插入這一行 (把功能傳進去) ★★★
             onUpdateGridCategory={handleUpdateGridCategory}
           />
         )}
