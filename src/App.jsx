@@ -424,7 +424,7 @@ const safeString = (str) => (str || '').toString();
 // ==========================================
 // ★ 版本號設定 (修改這裡會同步更新登入頁與設定頁)
 // ==========================================
-const APP_VERSION = 'v7.5 (完整版測試)';
+const APP_VERSION = 'v18.2 (母艦測試版)';
 // ==========================================
 // Auth Feature Flag
 // ==========================================
@@ -1964,6 +1964,55 @@ const RecipeListScreen = ({
     </div>
   );
 };
+
+// ==========================================
+// 7. Mothership Center (Official Templates)
+// ==========================================
+const CloudSyncScreen = ({ shopId, userRole, onDownload, onUpload }) => {
+  const isDevMothership = shopId === 'iba_master' && userRole === 'owner';
+
+  return (
+    <div className="h-full flex flex-col w-full bg-slate-950">
+      <div className="shrink-0 bg-slate-950/95 backdrop-blur z-20 border-b border-slate-800 shadow-md px-4 pt-safe pb-3">
+        <div className="flex justify-between items-center mt-3">
+          <h2 className="text-2xl font-serif text-slate-100">雲端中心</h2>
+        </div>
+      </div>
+
+      <div className="flex-1 overflow-y-auto p-4 space-y-4 pb-32 custom-scrollbar">
+        {/* Download */}
+        <div className="bg-slate-900/60 border border-slate-800 rounded-2xl p-4">
+          <button
+            onClick={onDownload}
+            className="w-full py-4 bg-blue-600 hover:bg-blue-500 text-white font-bold rounded-2xl shadow-lg shadow-blue-900/20 transition-all active:scale-95 flex items-center justify-center gap-2"
+          >
+            <Cloud size={20} />
+            下載官方擴充包
+          </button>
+          <p className="text-xs text-slate-400 mt-2 text-center">
+            下載官方整理的IBA經典酒譜與材料資訊
+          </p>
+        </div>
+
+        {/* Upload (hidden) */}
+        {isDevMothership && (
+          <div className="bg-slate-900/40 border border-slate-800 rounded-2xl p-4">
+            <button
+              onClick={onUpload}
+              className="w-full py-4 border-2 border-dashed border-slate-700 hover:border-amber-500/60 text-slate-300 hover:text-white font-bold rounded-2xl transition-colors active:scale-95"
+            >
+              [開發者] 上傳當前資料
+            </button>
+            <p className="text-xs text-slate-500 mt-2 text-center">
+              僅限 iba_master 店家 + 店長使用
+            </p>
+          </div>
+        )}
+      </div>
+    </div>
+  );
+};
+
 const FeaturedSectionScreen = ({
   sections,
   setSections,
@@ -5178,6 +5227,9 @@ useEffect(() => {
             setStaffList(doc.data().staffList);
           } else {
             setStaffList([]);
+            try {
+              localStorage.removeItem('bar_staff_list_v1');
+            } catch (e) {}
           }
         } catch (e) {
           console.error('Fetch staff error', e);
@@ -6159,6 +6211,7 @@ function MainAppContent() {
   const [foodItems, setFoodItems] = useState([]);
   const [sections, setSections] = useState([]);
   const [staffList, setStaffList] = useState([]);
+  const STAFF_LIST_CACHE_KEY = 'bar_staff_list_v1';
   const [isOnline, setIsOnline] = useState(navigator.onLine);
 
   const [adminPassword, setAdminPassword] = useState(
@@ -6207,6 +6260,9 @@ function MainAppContent() {
     });
 
     setStaffList(updatedList);
+    try {
+      localStorage.setItem(STAFF_LIST_CACHE_KEY, JSON.stringify(updatedList));
+    } catch (e) {}
 
     if (window.firebase && shopId) {
       await window.firebase
@@ -6643,7 +6699,7 @@ function MainAppContent() {
   };
 
   useEffect(() => {
-    if (userRole === 'customer' && activeTab === 'tools') {
+    if (userRole === 'customer' && (activeTab === 'tools' || activeTab === 'cloud')) {
       setActiveTab('recipes');
     }
   }, [userRole, activeTab]);
@@ -6713,7 +6769,15 @@ function MainAppContent() {
           (doc) => {
             if (doc.exists) {
               const data = doc.data();
-              if (data.staffList) setStaffList(data.staffList);
+              if (data.staffList) {
+                setStaffList(data.staffList);
+                try {
+                  localStorage.setItem(
+                    STAFF_LIST_CACHE_KEY,
+                    JSON.stringify(data.staffList)
+                  );
+                } catch (e) {}
+              }
               // 載入商店名稱
               if (data.shopName) {
                 setCurrentShopName(data.shopName);
@@ -6749,6 +6813,9 @@ function MainAppContent() {
               setCurrentShopName(shopId);
               setNewShopNameInput(shopId);
               setStaffList([]);
+              try {
+                localStorage.removeItem(STAFF_LIST_CACHE_KEY);
+              } catch (e) {}
             }
           },
           (error) => {
@@ -6903,6 +6970,9 @@ const handleLogout = async () => {
   setRecipes([]);
   setFoodItems([]);
   setStaffList([]);
+  try {
+    localStorage.removeItem(STAFF_LIST_CACHE_KEY);
+  } catch (e) {}
   
   // 4. 清除網址列參數 (讓網址變乾淨)
   if (window.history.pushState) {
@@ -6918,26 +6988,150 @@ const handleLogout = async () => {
   const showAlert = (title, message) =>
     setDialog({ isOpen: true, type: 'alert', title, message, onConfirm: null });
 
+  // ==========================================
+  // Mothership Center (Official Templates)
+  // ==========================================
+  const runBatchedWrites = async (db, writeFn, items, chunkSize = 450) => {
+    let batch = db.batch();
+    let count = 0;
+    for (const it of items) {
+      writeFn(batch, it);
+      count += 1;
+      if (count >= chunkSize) {
+        await batch.commit();
+        batch = db.batch();
+        count = 0;
+      }
+    }
+    if (count > 0) await batch.commit();
+  };
+
+  const handleUploadToMothership = async () => {
+    // 安全檢查
+    if (shopId !== 'iba_master') {
+      alert('⚠️ 非 iba_master 商店無法上傳官方資料。');
+      return;
+    }
+    if (userRole !== 'owner') {
+      alert('⚠️ 僅限店長上傳。');
+      return;
+    }
+    if (!window.firebase) return alert('Firebase 尚未初始化');
+
+    // 密碼檢查
+    const pwd = prompt('請輸入上傳密碼：');
+    if (pwd !== 'admin888') {
+      alert('密碼錯誤，已取消。');
+      return;
+    }
+
+    try {
+      const db = window.firebase.firestore();
+      const ingCol = db.collection('official_templates').doc('v1').collection('ingredients');
+      const recCol = db.collection('official_templates').doc('v1').collection('recipes');
+
+      const safeIngredients = Array.isArray(ingredients) ? ingredients : [];
+      const safeRecipes = Array.isArray(recipes) ? recipes : [];
+
+      await runBatchedWrites(db, (batch, i) => {
+        const id = i?.id || generateId();
+        batch.set(ingCol.doc(id), { ...i, id }, { merge: true });
+      }, safeIngredients);
+
+      await runBatchedWrites(db, (batch, r) => {
+        const id = r?.id || generateId();
+        batch.set(recCol.doc(id), { ...r, id }, { merge: true });
+      }, safeRecipes);
+
+      showAlert('同步成功', `已上傳 ${safeRecipes.length} 筆酒譜、${safeIngredients.length} 筆材料到官方資料庫`);
+    } catch (e) {
+      console.error('Upload mothership error:', e);
+      showAlert('錯誤', '上傳失敗：' + (e?.message || '未知錯誤'));
+    }
+  };
+
+  const handleDownloadFromMothership = async () => {
+    if (!window.firebase) return alert('Firebase 尚未初始化');
+    if (!shopId) return alert('Shop ID 遺失');
+
+    showConfirm(
+      '下載官方擴充包',
+      '將下載官方認證的酒譜與材料，並合併寫入到你的商店資料庫（不會覆蓋其他欄位）。確定要繼續嗎？',
+      async () => {
+        try {
+          const db = window.firebase.firestore();
+          const ingSnap = await db
+            .collection('official_templates')
+            .doc('v1')
+            .collection('ingredients')
+            .get();
+          const recSnap = await db
+            .collection('official_templates')
+            .doc('v1')
+            .collection('recipes')
+            .get();
+
+          const templateIngredients = ingSnap.docs.map((d) => ({ id: d.id, ...d.data() }));
+          const templateRecipes = recSnap.docs.map((d) => ({ id: d.id, ...d.data() }));
+
+          const shopIngCol = db.collection('shops').doc(shopId).collection('ingredients');
+          const shopRecCol = db.collection('shops').doc(shopId).collection('recipes');
+
+          await runBatchedWrites(db, (batch, i) => {
+            const id = i?.id || generateId();
+            batch.set(shopIngCol.doc(id), { ...i, id }, { merge: true });
+          }, templateIngredients);
+
+          await runBatchedWrites(db, (batch, r) => {
+            const id = r?.id || generateId();
+            batch.set(shopRecCol.doc(id), { ...r, id }, { merge: true });
+          }, templateRecipes);
+
+          showAlert(
+            '下載完成',
+            `已合併寫入 ${templateRecipes.length} 筆酒譜、${templateIngredients.length} 筆材料`
+          );
+        } catch (e) {
+          console.error('Download mothership error:', e);
+          showAlert('錯誤', '下載失敗：' + (e?.message || '未知錯誤'));
+        }
+      }
+    );
+  };
+
   const handleUnlockRequest = () => {
     setShowPasswordModal(true);
     setPasswordInput('');
   };
 
   const handleUnlockConfirm = () => {
-    const staffMatch = staffList.find((s) => s.password === passwordInput);
+    const input = safeString(passwordInput).trim();
+    const cachedStaffList = (() => {
+      try {
+        const raw = localStorage.getItem(STAFF_LIST_CACHE_KEY);
+        return raw ? JSON.parse(raw) : [];
+      } catch (e) {
+        return [];
+      }
+    })();
+
+    const candidates = Array.isArray(staffList) && staffList.length > 0 ? staffList : cachedStaffList;
+    const staffMatch = (candidates || []).find(
+      (s) => safeString(s?.password).trim() === input
+    );
     if (staffMatch) {
       setUserRole(staffMatch.role);
       setShowPasswordModal(false);
       return;
     }
 
-    if (passwordInput === adminPassword) {
+    if (input && input === safeString(adminPassword).trim()) {
       setUserRole('owner');
       setShowPasswordModal(false);
       return;
     }
 
-    if (passwordInput === '9999') {
+    if (input === '9999') {
       alert('使用緊急密碼解鎖');
       setUserRole('owner');
       setShowPasswordModal(false);
@@ -6975,6 +7169,9 @@ const handleLogout = async () => {
     };
     const updatedList = [...staffList, newStaff];
     setStaffList(updatedList);
+    try {
+      localStorage.setItem(STAFF_LIST_CACHE_KEY, JSON.stringify(updatedList));
+    } catch (e) {}
     setNewStaffName('');
     setNewStaffPwd('');
     setIsNewStaffManager(false);
@@ -6993,6 +7190,9 @@ const handleLogout = async () => {
   const handleRemoveStaff = async (id) => {
     const updatedList = staffList.filter((s) => s.id !== id);
     setStaffList(updatedList);
+    try {
+      localStorage.setItem(STAFF_LIST_CACHE_KEY, JSON.stringify(updatedList));
+    } catch (e) {}
     if (window.firebase && shopId) {
       await window.firebase
         .firestore()
@@ -8014,6 +8214,15 @@ const handleLogout = async () => {
             </div>
           </div>
         )}
+
+        {activeTab === 'cloud' && userRole !== 'customer' && (
+          <CloudSyncScreen
+            shopId={shopId}
+            userRole={userRole}
+            onDownload={handleDownloadFromMothership}
+            onUpload={handleUploadToMothership}
+          />
+        )}
       </main>
 
       <HelpModal
@@ -8090,6 +8299,7 @@ const handleLogout = async () => {
           { id: 'featured', icon: Star, l: '專區' },
           showInventory && { id: 'ingredients', icon: GlassWater, l: '材料' },
           showQuickCalc && { id: 'quick', icon: Calculator, l: '速算' },
+          userRole !== 'customer' && { id: 'cloud', icon: Cloud, l: '雲端' },
           userRole !== 'customer' && { id: 'tools', icon: Settings, l: '設定' },
         ]
           .filter(Boolean)
