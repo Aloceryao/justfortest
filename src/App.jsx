@@ -419,7 +419,7 @@ const safeString = (str) => (str || '').toString();
 // ==========================================
 // ★ 版本號設定 (修改這裡會同步更新登入頁與設定頁)
 // ==========================================
-const APP_VERSION = 'v16.10.79 (登入測試完整版)';
+const APP_VERSION = 'v16.10.791 (登入測試完整版)';
 const safeNumber = (num) => {
   const n = parseFloat(num);
   return isNaN(n) ? 0 : n;
@@ -4837,7 +4837,7 @@ const ViewerOverlay = ({
 };
 
 // ==========================================
-// 5. Login Screen (iOS PWA 修復版)
+// 5. Login Screen (B計畫：LocalStorage 強效版)
 // ==========================================
 
 const LoginScreen = ({ onLogin, firebaseReady }) => {
@@ -4862,32 +4862,33 @@ const LoginScreen = ({ onLogin, firebaseReady }) => {
 
   // 處理 Google Redirect 回來的結果
   useEffect(() => {
-    // 如果 Firebase 還沒準備好，就先不執行
+    // 1. 基本檢查：如果 Firebase 沒好，或是根本沒有「正在登入中」的標記，就不做事
     if (!firebaseReady || !window.firebase) return;
+    
+    const authMode = localStorage.getItem('google_auth_mode');
+    if (!authMode) return; 
 
     const handleRedirectResult = async () => {
-      // ★ 檢查是否有正在進行的 Google 登入流程標記
-      const authMode = sessionStorage.getItem('google_auth_mode');
-      if (!authMode) return; 
-
+      console.log('[Google Login] 偵測到登入標記:', authMode, '開始處理...');
       setLoading(true);
       
       try {
         const auth = window.firebase.auth();
         const result = await auth.getRedirectResult();
         
-        // 如果沒有結果 (可能是剛重新整理頁面，但不是從 Google 回來)
+        // 如果沒有 User 物件，可能是剛載入頁面但不是從 Google 跳回來的
         if (!result.user) {
+          console.log('[Google Login] 沒有偵測到 Redirect 用戶資料');
           setLoading(false);
           return;
         }
         
-        console.log('[Google Login] Redirect 成功返回:', result.user.email);
+        console.log('[Google Login] Redirect 成功返回 User:', result.user.email);
         const userId = result.user.uid;
         const userEmail = result.user.email;
         
-        // 清除標記，避免重複執行
-        sessionStorage.removeItem('google_auth_mode');
+        // ★ 重要：成功拿到人之後，立刻清除標記，避免無限迴圈
+        localStorage.removeItem('google_auth_mode');
         
         const db = window.firebase.firestore();
         const userDoc = await db.collection('users').doc(userId).get();
@@ -4919,14 +4920,15 @@ const LoginScreen = ({ onLogin, firebaseReady }) => {
       } catch (e) {
         console.error('Redirect 處理錯誤:', e);
         setError('登入處理失敗：' + e.message);
-        sessionStorage.removeItem('google_auth_mode');
+        // 失敗也要清除標記，不然下次重整又會卡住
+        localStorage.removeItem('google_auth_mode');
       } finally {
         setLoading(false);
       }
     };
     
     handleRedirectResult();
-  }, [firebaseReady, onLogin]); // 當 firebaseReady 變為 true 時也會觸發檢查
+  }, [firebaseReady, onLogin]);
 
   // 店員模式：自動載入店員名單
   useEffect(() => {
@@ -4993,7 +4995,7 @@ const LoginScreen = ({ onLogin, firebaseReady }) => {
     }
   };
 
-  // ========== 店長 Google 登入 (改用 Redirect) ==========
+  // ========== 店長 Google 登入 (改用 Redirect + LocalStorage) ==========
   const handleGoogleLogin = async () => {
     if (!firebaseReady) return setError('系統載入中，請稍候...');
     setError('');
@@ -5003,8 +5005,8 @@ const LoginScreen = ({ onLogin, firebaseReady }) => {
       const auth = window.firebase.auth();
       const provider = new window.firebase.auth.GoogleAuthProvider();
       
-      // ★ 關鍵修改：標記這是「登入」流程，並使用 Redirect
-      sessionStorage.setItem('google_auth_mode', 'login');
+      // ★ B 計畫核心：改用 localStorage，因為 iOS Standalone 容易遺失 sessionStorage
+      localStorage.setItem('google_auth_mode', 'login');
       
       // iOS PWA 必須使用 redirect，popup 會被擋或卡住
       await auth.signInWithRedirect(provider);
@@ -5013,11 +5015,11 @@ const LoginScreen = ({ onLogin, firebaseReady }) => {
       console.error('[Google Login] 啟動失敗:', e);
       setError('無法啟動 Google 登入：' + e.message);
       setLoading(false);
-      sessionStorage.removeItem('google_auth_mode');
+      localStorage.removeItem('google_auth_mode');
     }
   };
 
-  // ========== 店長 Google 註冊 (改用 Redirect) ==========
+  // ========== 店長 Google 註冊 (改用 Redirect + LocalStorage) ==========
   const handleGoogleRegisterStart = async () => {
     if (!firebaseReady) return;
     setLoading(true);
@@ -5029,8 +5031,8 @@ const LoginScreen = ({ onLogin, firebaseReady }) => {
       
       provider.setCustomParameters({ prompt: 'select_account' });
       
-      // ★ 關鍵修改：標記這是「註冊」流程
-      sessionStorage.setItem('google_auth_mode', 'register');
+      // ★ B 計畫核心：註冊流程也改用 localStorage
+      localStorage.setItem('google_auth_mode', 'register');
       
       await auth.signInWithRedirect(provider);
       
@@ -5038,7 +5040,7 @@ const LoginScreen = ({ onLogin, firebaseReady }) => {
       console.error('Google 註冊錯誤:', e);
       setError('Google 註冊失敗：' + e.message);
       setLoading(false);
-      sessionStorage.removeItem('google_auth_mode');
+      localStorage.removeItem('google_auth_mode');
     }
   };
 
