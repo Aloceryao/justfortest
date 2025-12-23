@@ -424,7 +424,7 @@ const safeString = (str) => (str || '').toString();
 // ==========================================
 // ★ 版本號設定 (修改這裡會同步更新登入頁與設定頁)
 // ==========================================
-const APP_VERSION = 'v17.4 (完整版測試)';
+const APP_VERSION = 'v7.5 (完整版測試)';
 // ==========================================
 // Auth Feature Flag
 // ==========================================
@@ -5017,6 +5017,47 @@ const LoginScreen = ({ onLogin }) => {
   const [password, setPassword] = useState('');
   const [shopId, setShopId] = useState('');
   const [shopName, setShopName] = useState('');
+
+  // 記住 Email（只記 Email，不記密碼）
+  const REMEMBER_EMAIL_KEY = 'bar_remember_email_v1';
+  const SAVED_EMAIL_KEY = 'bar_saved_email_v1';
+  const [rememberEmail, setRememberEmail] = useState(() => {
+    try {
+      return localStorage.getItem(REMEMBER_EMAIL_KEY) === 'true';
+    } catch (e) {
+      return false;
+    }
+  });
+
+  useEffect(() => {
+    // 初始化：如果有勾選記住，就自動帶入 Email
+    try {
+      const remembered = localStorage.getItem(REMEMBER_EMAIL_KEY) === 'true';
+      const saved = localStorage.getItem(SAVED_EMAIL_KEY) || '';
+      if (remembered && saved) setEmail(saved);
+      setRememberEmail(remembered);
+    } catch (e) {}
+  }, []);
+
+  useEffect(() => {
+    // 同步記住開關
+    try {
+      localStorage.setItem(REMEMBER_EMAIL_KEY, rememberEmail ? 'true' : 'false');
+      if (!rememberEmail) {
+        localStorage.removeItem(SAVED_EMAIL_KEY);
+      } else if (email) {
+        localStorage.setItem(SAVED_EMAIL_KEY, email);
+      }
+    } catch (e) {}
+  }, [rememberEmail]);
+
+  useEffect(() => {
+    // 勾選時，Email 變動就持續更新
+    if (!rememberEmail) return;
+    try {
+      localStorage.setItem(SAVED_EMAIL_KEY, email);
+    } catch (e) {}
+  }, [email, rememberEmail]);
   
   // 店員登入
   const [staffList, setStaffList] = useState([]);
@@ -5589,6 +5630,15 @@ useEffect(() => {
                 placeholder="Email"
                 autoComplete="email"
               />
+              <label className="flex items-center gap-2 text-xs text-slate-400 select-none">
+                <input
+                  type="checkbox"
+                  checked={rememberEmail}
+                  onChange={(e) => setRememberEmail(e.target.checked)}
+                  className="accent-amber-500"
+                />
+                記住此 Email
+              </label>
               <input
                 type="password"
                 value={password}
@@ -5711,6 +5761,15 @@ useEffect(() => {
                 placeholder="您的 Email"
                 autoComplete="email"
               />
+              <label className="flex items-center gap-2 text-xs text-slate-400 select-none">
+                <input
+                  type="checkbox"
+                  checked={rememberEmail}
+                  onChange={(e) => setRememberEmail(e.target.checked)}
+                  className="accent-amber-500"
+                />
+                記住此 Email
+              </label>
               <input
                 type="password"
                 value={password}
@@ -6974,12 +7033,28 @@ const handleLogout = async () => {
 
   const handleExportJSON = () => {
     const data = {
+      meta: {
+        exportedAt: new Date().toISOString(),
+        appVersion: APP_VERSION,
+      },
       ingredients,
       recipes,
       foodItems,
       sections,
-      staffList,
-      version: '14.2',
+      // 統一集中放進 settings，方便完整備份/還原
+      settings: {
+        shopName: currentShopName || shopId,
+        staffList,
+        ingredientCategories: ingCategories,
+        categorySubItems,
+        foodCategories,
+        availableBases,
+        availableTags,
+        availableTechniques,
+        availableGlasses,
+        gridCategoriesByTab,
+      },
+      version: '15.0-settings-backup',
     };
     const blob = new Blob([JSON.stringify(data, null, 2)], {
       type: 'application/json',
@@ -7058,6 +7133,47 @@ const handleLogout = async () => {
               { staffList: data.staffList },
               { merge: true }
             );
+
+          // 新版：完整還原 settings（config + grid_config）
+          if (data.settings && typeof data.settings === 'object') {
+            const cfg = {};
+            if (Array.isArray(data.settings.staffList))
+              cfg.staffList = data.settings.staffList;
+            if (data.settings.shopName) cfg.shopName = data.settings.shopName;
+            if (Array.isArray(data.settings.ingredientCategories))
+              cfg.ingredientCategories = data.settings.ingredientCategories;
+            if (data.settings.categorySubItems && typeof data.settings.categorySubItems === 'object')
+              cfg.categorySubItems = data.settings.categorySubItems;
+            if (Array.isArray(data.settings.foodCategories))
+              cfg.foodCategories = data.settings.foodCategories;
+
+            batch.set(
+              db
+                .collection('shops')
+                .doc(shopId)
+                .collection('settings')
+                .doc('config'),
+              cfg,
+              { merge: true }
+            );
+
+            // grid_config（新版：categoriesByTab；舊版相容：categories）
+            if (data.settings.gridCategoriesByTab) {
+              const byTab = normalizeGridCatsByTab(
+                data.settings.gridCategoriesByTab,
+                DEFAULT_GRID_CATS
+              );
+              batch.set(
+                db
+                  .collection('shops')
+                  .doc(shopId)
+                  .collection('settings')
+                  .doc('grid_config'),
+                { categoriesByTab: byTab, categories: byTab.classic || [] },
+                { merge: true }
+              );
+            }
+          }
           await batch.commit();
           showAlert('還原成功', '資料已從備份檔還原');
         }
@@ -7142,6 +7258,25 @@ const handleLogout = async () => {
     }));
     const wsRec = window.XLSX.utils.json_to_sheet(recData);
     window.XLSX.utils.book_append_sheet(wb, wsRec, 'Recipes');
+
+    // Settings（備份用；Excel 匯入目前仍只匯入材料/酒譜）
+    const settingsRows = [
+      { Key: 'shopName', Value: currentShopName || shopId },
+      { Key: 'staffList', Value: JSON.stringify(staffList || []) },
+      { Key: 'ingredientCategories', Value: JSON.stringify(ingCategories || []) },
+      { Key: 'categorySubItems', Value: JSON.stringify(categorySubItems || {}) },
+      { Key: 'foodCategories', Value: JSON.stringify(foodCategories || []) },
+      { Key: 'availableBases', Value: JSON.stringify(availableBases || []) },
+      { Key: 'availableTags', Value: JSON.stringify(availableTags || []) },
+      { Key: 'availableTechniques', Value: JSON.stringify(availableTechniques || []) },
+      { Key: 'availableGlasses', Value: JSON.stringify(availableGlasses || []) },
+      { Key: 'gridCategoriesByTab', Value: JSON.stringify(gridCategoriesByTab || {}) },
+      { Key: 'exportedAt', Value: new Date().toISOString() },
+      { Key: 'appVersion', Value: APP_VERSION },
+    ];
+    const wsSettings = window.XLSX.utils.json_to_sheet(settingsRows);
+    window.XLSX.utils.book_append_sheet(wb, wsSettings, 'Settings');
+
     window.XLSX.writeFile(wb, `bar_data_${shopId}.xlsx`);
   };
 
