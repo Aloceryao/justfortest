@@ -424,7 +424,7 @@ const safeString = (str) => (str || '').toString();
 // ==========================================
 // ★ 版本號設定 (修改這裡會同步更新登入頁與設定頁)
 // ==========================================
-const APP_VERSION = 'v17.3 (完整版測試)';
+const APP_VERSION = 'v17.4 (完整版測試)';
 // ==========================================
 // Auth Feature Flag
 // ==========================================
@@ -2933,9 +2933,6 @@ const IngredientPickerModal = ({
   const [mainType, setMainType] = useState('all');
   const [subType, setSubType] = useState('all');
 
-  // 如果沒開，或者 onSelect 函式遺失，就不渲染
-  if (!isOpen) return null;
-
   // ★ 修正 2: 這裡加上安全檢查，確保 ingredients 是陣列
   const safeIngredients = Array.isArray(ingredients) ? ingredients : [];
 
@@ -2975,6 +2972,10 @@ const IngredientPickerModal = ({
 
     return matchSearch && matchMain && matchSub;
   });
+
+  // 如果沒開，或者 onSelect 函式遺失，就不渲染
+  // 注意：Hook（含 useMemo）必須在任何 return 之前呼叫，避免 React hooks 順序錯亂
+  if (!isOpen) return null;
 
   return (
     <div className="fixed inset-0 z-[70] flex items-center justify-center p-4 bg-black/80 backdrop-blur-sm animate-fade-in">
