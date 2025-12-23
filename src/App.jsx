@@ -419,7 +419,7 @@ const safeString = (str) => (str || '').toString();
 // ==========================================
 // ★ 版本號設定 (修改這裡會同步更新登入頁與設定頁)
 // ==========================================
-const APP_VERSION = 'v16.10.8 (批量增加版)';
+const APP_VERSION = 'v16.10.81 (批量增加測試版)';
 const safeNumber = (num) => {
   const n = parseFloat(num);
   return isNaN(n) ? 0 : n;
@@ -5102,6 +5102,36 @@ useEffect(() => {
       setLoading(false);
     }
   };
+  // ========== (新) 測試用的 Redirect 登入 ==========
+  const handleGoogleLogin_Redirect = async () => {
+    // 1. 清除舊紀錄
+    localStorage.removeItem('google_login_debug');
+    setError('');
+    setLoading(true);
+    
+    try {
+      if (!window.firebase) {
+        setError('系統載入中...');
+        setLoading(false);
+        return;
+      }
+
+      const auth = window.firebase.auth();
+      const provider = new window.firebase.auth.GoogleAuthProvider();
+      
+      // 設定標記，讓 useEffect 知道這是登入回來的
+      sessionStorage.setItem('google_auth_mode', 'login');
+      
+      // 使用 Redirect (跳轉)
+      await auth.signInWithRedirect(provider);
+      
+    } catch (e) {
+      console.error('Redirect Login Error:', e);
+      setError('登入啟動失敗：' + e.message);
+      setLoading(false);
+      sessionStorage.removeItem('google_auth_mode');
+    }
+  };
 
   // ========== 店長 Google 註冊（從註冊頁面觸發）==========
   const handleGoogleRegisterStart = async () => {
@@ -5473,6 +5503,18 @@ useEffect(() => {
                 <path fill="#EA4335" d="M12 5.38c1.62 0 3.06.56 4.21 1.64l3.15-3.15C17.45 2.09 14.97 1 12 1 7.7 1 3.99 3.47 2.18 7.07l3.66 2.84c.87-2.6 3.3-4.53 6.16-4.53z"/>
               </svg>
               Google 登入
+            </button>
+            {/* ▼▼▼ 這是新加的測試按鈕 ▼▼▼ */}
+            <button
+              type="button"
+              onClick={(e) => {
+                 e.preventDefault();
+                 handleGoogleLogin_Redirect(); // 呼叫新的函式
+              }}
+              disabled={loading}
+              className="w-full py-4 mt-4 bg-emerald-600 text-white font-bold rounded-xl shadow-lg hover:bg-emerald-500 transition-all active:scale-95 flex items-center justify-center gap-3"
+            >
+              🚀 Google 登入 (新版-跳轉測試)
             </button>
 
             <div className="text-center mt-4">
