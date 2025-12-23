@@ -419,7 +419,7 @@ const safeString = (str) => (str || '').toString();
 // ==========================================
 // ★ 版本號設定 (修改這裡會同步更新登入頁與設定頁)
 // ==========================================
-const APP_VERSION = 'v16.10.84 (批量增加測試版)';
+const APP_VERSION = 'v16.10.85 (批量增加測試版)';
 const safeNumber = (num) => {
   const n = parseFloat(num);
   return isNaN(n) ? 0 : n;
@@ -4859,35 +4859,30 @@ const LoginScreen = ({ onLogin }) => {
   const [loading, setLoading] = useState(false);
   const [showHelp, setShowHelp] = useState(false);
 
-// 處理 Google Redirect 回來的結果 (修正版：自動等待 Firebase 載入)
-// 處理 Google Redirect 回來的結果 (最終版：改用監聽器)
+// 處理 Google Redirect 回來的結果 (修正版：自動解除卡死狀態)
 const hasProcessedRedirect = React.useRef(false);
   
 useEffect(() => {
-  // 1. 檢查是否正在進行 Google 登入流程
   const authMode = localStorage.getItem('google_auth_mode');
-  if (!authMode) return; // 如果不是，就不動作
+  
+  // 1. 如果沒有標記，什麼都不做 (正常狀態)
+  if (!authMode) return; 
 
-  // 如果有標記，稍微轉圈圈顯示「處理中」
+  // 2. 如果有標記，開始轉圈
   setLoading(true);
 
   const checkLoginStatus = () => {
-    // 等待 Firebase 載入
     if (!window.firebase || !window.firebase.auth) {
       setTimeout(checkLoginStatus, 200);
       return;
     }
 
-    // ★ 關鍵：使用 onAuthStateChanged 監聽器
-    // 這是最穩的方法，它會等到 Firebase SDK 完全初始化並抓到使用者後才觸發
     const auth = window.firebase.auth();
+    
     const unsubscribe = auth.onAuthStateChanged(async (user) => {
-      
       if (user) {
-        // --- 成功抓到使用者！ ---
-        // alert('系統：登入成功，正在讀取資料...'); // 需要除錯時可打開
-        
-        localStorage.removeItem('google_auth_mode'); // 任務完成，清除標記
+        // --- A. 登入成功 ---
+        localStorage.removeItem('google_auth_mode'); 
         
         try {
           const db = window.firebase.firestore();
@@ -4917,16 +4912,24 @@ useEffect(() => {
         } catch (err) {
           alert('讀取資料錯誤：' + err.message);
           setLoading(false);
+          localStorage.removeItem('google_auth_mode');
         }
         
       } else {
-        // User 是 null，代表還沒登入，或者登入失敗
-        // 我們再試一次 getRedirectResult 看看有沒有錯誤訊息
+        // --- B. 使用者是 null (還沒登入，或是登入失敗) ---
+        
+        // ★ 關鍵修正：主動檢查 getRedirectResult
         auth.getRedirectResult().then((result) => {
-           // 如果連這裡都沒東西，表示真的沒登入，或是還在載入中
-           // 這裡不做動作，繼續等待下一次監聽觸發
+           if (!result.user) {
+               // ★★★ 這裡就是修正點！ ★★★
+               // 如果 getRedirectResult 也沒東西，代表根本沒有在登入
+               // 這是「殭屍標記」，立刻清除並停止轉圈！
+               console.log('偵測到卡住的標記，自動清除');
+               setLoading(false);
+               localStorage.removeItem('google_auth_mode');
+           }
+           // 如果有 user，上面的 onAuthStateChanged 會再次觸發並處理，所以這裡不用管
         }).catch((error) => {
-           // 這裡抓取「登入失敗」的原因 (例如使用者取消)
            console.error(error);
            alert('登入失敗：' + error.message);
            setLoading(false);
@@ -4935,7 +4938,6 @@ useEffect(() => {
       }
     });
 
-    // 清理函式：當組件卸載時，取消監聽
     return () => unsubscribe();
   };
 
