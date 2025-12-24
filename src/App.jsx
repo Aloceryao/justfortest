@@ -424,7 +424,7 @@ const safeString = (str) => (str || '').toString();
 // ==========================================
 // ★ 版本號設定 (修改這裡會同步更新登入頁與設定頁)
 // ==========================================
-const APP_VERSION = 'v18.3.7 (IBA母艦測試版)';
+const APP_VERSION = 'v18.3.8 (IBA母艦測試版)';
 // ==========================================
 // Auth Feature Flag
 // ==========================================
@@ -2619,6 +2619,7 @@ const InventoryScreen = ({
   onAddSubCategory,
   onDeleteSubCategory, // ★ 新增：接收刪除功能的接口
   isReadOnly,
+  userRole, // ★ 新增：接收用戶角色
 }) => {
   const [categoryFilter, setCategoryFilter] = useState('all');
   const [isAddingCat, setIsAddingCat] = useState(false);
@@ -2634,6 +2635,25 @@ const InventoryScreen = ({
 
   const [sortBy, setSortBy] = useState('name');
   const [search, setSearch] = useState('');
+  
+  // ★ 新增：隱藏 IBA 材料的設定（只有店長可以設定）
+  const HIDE_IBA_STORAGE_KEY = 'bar_hide_iba_ingredients';
+  const [hideIBAMaterials, setHideIBAMaterials] = useState(() => {
+    if (userRole !== 'owner') return false; // 只有店長可以設定
+    try {
+      const saved = localStorage.getItem(HIDE_IBA_STORAGE_KEY);
+      return saved === 'true';
+    } catch {
+      return false;
+    }
+  });
+
+  // 儲存隱藏設定
+  useEffect(() => {
+    if (userRole === 'owner') {
+      localStorage.setItem(HIDE_IBA_STORAGE_KEY, hideIBAMaterials.toString());
+    }
+  }, [hideIBAMaterials, userRole]);
 
   useEffect(() => {
     setSubCategoryFilter('all');
@@ -2703,6 +2723,9 @@ const InventoryScreen = ({
 
   const filteredIngredients = useMemo(() => {
     let list = ingredients.filter((i) => {
+      // ★ 新增：如果設定隱藏 IBA 材料，過濾掉 source === 'marketplace' 的材料
+      if (hideIBAMaterials && i.source === 'marketplace') return false;
+      
       if (categoryFilter !== 'all' && i.type !== categoryFilter) return false;
 
       if (categoryFilter !== 'all' && subCategoryFilter !== 'all') {
@@ -2727,7 +2750,7 @@ const InventoryScreen = ({
       list.sort((a, b) => (b.price || 0) - (a.price || 0));
     }
     return list;
-  }, [ingredients, categoryFilter, subCategoryFilter, sortBy, search]);
+  }, [ingredients, categoryFilter, subCategoryFilter, sortBy, search, hideIBAMaterials]);
 
   const currentSubOptions =
     categoryFilter !== 'all' && categorySubItems
@@ -2740,6 +2763,21 @@ const InventoryScreen = ({
         <div className="flex justify-between items-center mb-2 mt-4">
           <h2 className="text-2xl font-serif text-slate-100">材料庫</h2>
           <div className="flex gap-2">
+            {/* ★ 新增：隱藏 IBA 材料開關（只有店長可以看到） */}
+            {userRole === 'owner' && (
+              <button
+                onClick={() => setHideIBAMaterials(!hideIBAMaterials)}
+                className={`flex items-center gap-1 px-3 py-2 rounded-full border text-xs transition-colors ${
+                  hideIBAMaterials
+                    ? 'bg-amber-600/20 border-amber-500/50 text-amber-400'
+                    : 'bg-slate-800 border-slate-700 text-slate-400 hover:text-white'
+                }`}
+                title={hideIBAMaterials ? '顯示 IBA 材料' : '隱藏 IBA 材料'}
+              >
+                <Star size={14} className={hideIBAMaterials ? 'fill-amber-400' : ''} />
+                <span className="hidden sm:inline">IBA</span>
+              </button>
+            )}
             {!isReadOnly && (
               <button
                 onClick={() =>
@@ -8054,6 +8092,7 @@ const handleLogout = async () => {
             onAddSubCategory={handleAddSubCategory}
             onDeleteSubCategory={handleDeleteSubCategory} // ★ Pass delete function
             isReadOnly={isStaff}
+            userRole={userRole} // ★ 新增：傳入用戶角色
           />
         )}
 
