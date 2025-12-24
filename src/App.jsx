@@ -424,7 +424,7 @@ const safeString = (str) => (str || '').toString();
 // ==========================================
 // ★ 版本號設定 (修改這裡會同步更新登入頁與設定頁)
 // ==========================================
-const APP_VERSION = 'v18.2 (母艦測試版)';
+const APP_VERSION = 'v18.3 (母艦IBA酒譜測試版)';
 // ==========================================
 // Auth Feature Flag
 // ==========================================
@@ -475,10 +475,15 @@ const normalizeGridCatsByTab = (raw, defaultList = []) => {
       // 確保每個方塊都有穩定 id，避免刪除/更新無法比對
       .map((x) => ({ ...x, id: x?.id || generateId() }));
 
-  // 舊版：單一 array → 複製成三份
+  // 舊版：單一 array → 複製成四份（加入 iba）
   if (Array.isArray(raw)) {
     const list = cloneList(raw);
-    return { classic: list, signature: cloneList(list), single: cloneList(list) };
+    return { 
+      classic: list, 
+      signature: cloneList(list), 
+      single: cloneList(list),
+      iba: cloneList(list) 
+    };
   }
 
   // 新版：object
@@ -487,12 +492,18 @@ const normalizeGridCatsByTab = (raw, defaultList = []) => {
       classic: cloneList(raw.classic ?? raw.categories ?? defaultList),
       signature: cloneList(raw.signature ?? raw.categories ?? defaultList),
       single: cloneList(raw.single ?? raw.categories ?? defaultList),
+      iba: cloneList(raw.iba ?? defaultList),
     };
   }
 
   // 預設
   const list = cloneList(defaultList);
-  return { classic: list, signature: cloneList(list), single: cloneList(list) };
+  return { 
+    classic: list, 
+    signature: cloneList(list), 
+    single: cloneList(list),
+    iba: cloneList(list) 
+  };
 };
 
 const safeNumber = (num) => {
@@ -1607,7 +1618,7 @@ const RecipeListScreen = ({
   const [filterTags, setFilterTags] = useState([]);
   const [showFilters, setShowFilters] = useState(false);
   const getGridTabKey = (k) =>
-    ['classic', 'signature', 'single'].includes(k) ? k : 'classic';
+    ['classic', 'signature', 'single', 'iba'].includes(k) ? k : 'classic';
   const gridTabKey = getGridTabKey(recipeCategoryFilter);
   const getActiveGridStorageKey = (k) => `bar_active_grid_${k}_v1`;
 
@@ -1652,7 +1663,7 @@ const RecipeListScreen = ({
   }, [activeBlock, gridTabKey]);
 
   useEffect(() => {
-    // 切換經典/特調/單品時，載入該分頁自己的 activeBlock，並清空基酒/風味篩選避免殘留
+    // 切換經典/特調/單品/IBA時，載入該分頁自己的 activeBlock，並清空基酒/風味篩選避免殘留
     try {
       const saved = localStorage.getItem(getActiveGridStorageKey(gridTabKey));
       setActiveBlock(saved ? JSON.parse(saved) : null);
@@ -1718,9 +1729,17 @@ const RecipeListScreen = ({
       sourceList = [...safeRecipes, ...singleIngredients];
     }
 
+    // IBA 頁面：只顯示從雲端下載的酒譜（標記為 marketplace 來源）
+    if (recipeCategoryFilter === 'iba') {
+      sourceList = safeRecipes.filter((r) => {
+        return r.source === 'marketplace';
+      });
+    }
+
     return sourceList.filter((r) => {
       const matchCat =
         recipeCategoryFilter === 'all' ||
+        (recipeCategoryFilter === 'iba' && sourceList.includes(r)) ||
         r.type === recipeCategoryFilter ||
         (recipeCategoryFilter === 'single' &&
           (r.type === 'soft' || r.isIngredient || r.type === 'single'));
@@ -1799,7 +1818,7 @@ const RecipeListScreen = ({
               className="w-full bg-slate-900 text-slate-200 pl-9 pr-4 py-2 rounded-xl border border-slate-800 focus:outline-none focus:border-amber-500/50 text-sm"
             />
           </div>
-          {!showGrid && recipeCategoryFilter !== 'single' && (
+          {!showGrid && recipeCategoryFilter !== 'single' && recipeCategoryFilter !== 'iba' && (
             <button
               onClick={() => setShowFilters(!showFilters)}
               className={`p-2 rounded-xl border transition-colors ${
@@ -1832,26 +1851,63 @@ const RecipeListScreen = ({
           )}
         </div>
         <div className="grid grid-cols-2 gap-2 px-4 pb-2 border-b border-slate-800/50 w-full">
-          {[
-            { id: 'all', label: '全部 All' },
-            { id: 'classic', label: '經典 Classic' },
-            { id: 'signature', label: '特調 Signature' },
-            { id: 'single', label: '單品/純飲 Single' },
-          ].map((cat) => (
-            <button
-              key={cat.id}
-              onClick={() => setRecipeCategoryFilter(cat.id)}
-              className={`py-2 px-2 text-xs font-bold border rounded-lg transition-colors select-none flex items-center justify-center gap-1 ${
-                recipeCategoryFilter === cat.id
-                  ? 'bg-slate-800 text-amber-500 border-amber-500'
-                  : 'border-slate-700 text-slate-500 hover:bg-slate-800'
-              }`}
-            >
-              {cat.label}
-            </button>
-          ))}
+          {/* 第一行：全部（佔滿整行） */}
+          <button
+            onClick={() => setRecipeCategoryFilter('all')}
+            className={`col-span-2 py-4 px-4 text-base font-bold border rounded-lg transition-colors select-none flex items-center justify-center gap-1 ${
+              recipeCategoryFilter === 'all'
+                ? 'bg-slate-800 text-amber-500 border-amber-500'
+                : 'border-slate-700 text-slate-500 hover:bg-slate-800'
+            }`}
+          >
+            全部 All
+          </button>
+          
+          {/* 第二行：經典、特調 */}
+          <button
+            onClick={() => setRecipeCategoryFilter('classic')}
+            className={`py-4 px-4 text-base font-bold border rounded-lg transition-colors select-none flex items-center justify-center gap-1 ${
+              recipeCategoryFilter === 'classic'
+                ? 'bg-slate-800 text-amber-500 border-amber-500'
+                : 'border-slate-700 text-slate-500 hover:bg-slate-800'
+            }`}
+          >
+            經典 Classic
+          </button>
+          <button
+            onClick={() => setRecipeCategoryFilter('signature')}
+            className={`py-4 px-4 text-base font-bold border rounded-lg transition-colors select-none flex items-center justify-center gap-1 ${
+              recipeCategoryFilter === 'signature'
+                ? 'bg-slate-800 text-amber-500 border-amber-500'
+                : 'border-slate-700 text-slate-500 hover:bg-slate-800'
+            }`}
+          >
+            特調 Signature
+          </button>
+          
+          {/* 第三行：IBA、單品純飲 */}
+          <button
+            onClick={() => setRecipeCategoryFilter('iba')}
+            className={`py-4 px-4 text-base font-bold border rounded-lg transition-colors select-none flex items-center justify-center gap-1 ${
+              recipeCategoryFilter === 'iba'
+                ? 'bg-slate-800 text-amber-500 border-amber-500'
+                : 'border-slate-700 text-slate-500 hover:bg-slate-800'
+            }`}
+          >
+            IBA調酒 IBA
+          </button>
+          <button
+            onClick={() => setRecipeCategoryFilter('single')}
+            className={`py-4 px-4 text-base font-bold border rounded-lg transition-colors select-none flex items-center justify-center gap-1 ${
+              recipeCategoryFilter === 'single'
+                ? 'bg-slate-800 text-amber-500 border-amber-500'
+                : 'border-slate-700 text-slate-500 hover:bg-slate-800'
+            }`}
+          >
+            單品/純飲 Single
+          </button>
         </div>
-        {showFilters && !showGrid && recipeCategoryFilter !== 'single' && (
+        {showFilters && !showGrid && recipeCategoryFilter !== 'single' && recipeCategoryFilter !== 'iba' && (
           <div className="p-4 bg-slate-900 border-b border-slate-800 animate-slide-up w-full">
             <div className="mb-4">
               <ChipSelector
@@ -2755,7 +2811,10 @@ const InventoryScreen = ({
           {ingCategories.map((cat) => (
             <div key={cat.id} className="relative group">
               <button
-                onClick={() => setCategoryFilter(cat.id)}
+                onClick={(e) => {
+                  e.stopPropagation();
+                  setCategoryFilter(cat.id);
+                }}
                 className={`whitespace-nowrap px-4 py-2 rounded-full text-sm font-bold transition-all pr-5 select-none ${
                   categoryFilter === cat.id
                     ? 'bg-slate-700 text-white border border-amber-500/50 shadow'
@@ -2769,9 +2828,11 @@ const InventoryScreen = ({
                   <button
                     onClick={(e) => {
                       e.stopPropagation();
+                      e.preventDefault();
                       deleteCategory(cat.id);
                     }}
-                    className="absolute -top-1 -right-1 bg-rose-600 text-white rounded-full p-0.5 w-4 h-4 flex items-center justify-center opacity-0 group-hover:opacity-100 transition-opacity text-[8px]"
+                    className="absolute -top-1 -right-1 bg-rose-600 text-white rounded-full p-0.5 w-4 h-4 flex items-center justify-center opacity-0 group-hover:opacity-100 transition-opacity text-[8px] pointer-events-auto z-10"
+                    style={{ pointerEvents: 'auto' }}
                   >
                     <X size={8} strokeWidth={4} />
                   </button>
@@ -2828,7 +2889,10 @@ const InventoryScreen = ({
               // ★ 修改：加上刪除小分類的按鈕
               <div key={subItem} className="relative group">
                 <button
-                  onClick={() => setSubCategoryFilter(subItem)}
+                  onClick={(e) => {
+                    e.stopPropagation();
+                    setSubCategoryFilter(subItem);
+                  }}
                   className={`whitespace-nowrap px-3 py-1.5 rounded text-xs font-medium transition-colors border ${
                     subCategoryFilter === subItem
                       ? 'bg-slate-700 border-slate-600 text-white'
@@ -2841,9 +2905,11 @@ const InventoryScreen = ({
                   <button
                     onClick={(e) => {
                       e.stopPropagation();
+                      e.preventDefault();
                       handleDeleteSubCat(subItem);
                     }}
-                    className="absolute -top-1 -right-1 bg-rose-600 text-white rounded-full p-0.5 w-4 h-4 flex items-center justify-center opacity-0 group-hover:opacity-100 transition-opacity text-[8px]"
+                    className="absolute -top-1 -right-1 bg-rose-600 text-white rounded-full p-0.5 w-4 h-4 flex items-center justify-center opacity-0 group-hover:opacity-100 transition-opacity text-[8px] pointer-events-auto z-10"
+                    style={{ pointerEvents: 'auto' }}
                   >
                     <X size={8} strokeWidth={4} />
                   </button>
@@ -5118,95 +5184,95 @@ const LoginScreen = ({ onLogin }) => {
   const [loading, setLoading] = useState(false);
   const [showHelp, setShowHelp] = useState(false);
 
-// 處理 Google Redirect 回來的結果
-const hasProcessedRedirect = React.useRef(false);
+  // 處理 Google Redirect 回來的結果
+  const hasProcessedRedirect = React.useRef(false);
   
-useEffect(() => {
-  const handleRedirectResult = async () => {
-    // 若已停用 Google 登入/註冊：清掉可能殘留的標記，避免卡住或誤判
-    if (!ENABLE_GOOGLE_AUTH) {
-      const authMode = sessionStorage.getItem('google_auth_mode');
-      if (authMode) {
-        sessionStorage.removeItem('google_auth_mode');
-        // 只有在確定是 Google 流程殘留時才嘗試登出，避免影響 Email 登入狀態
-        try {
-          if (window.firebase && window.firebase.auth) {
-            window.firebase.auth().signOut().catch(() => {});
-          }
-        } catch (e) {}
-      }
-      return;
-    }
-    // 1. 如果 Firebase 還沒載入，或是已經處理過，就跳過
-    if (hasProcessedRedirect.current || !window.firebase) return;
-    
-    // 2. ★ 防護機制：如果根本沒有「Google 登入流程」的標記，就直接結束
-    // 這能有效防止 Safari 在重新整理頁面時誤判，造成無限轉圈
-    const authMode = sessionStorage.getItem('google_auth_mode');
-    if (!authMode) return; 
-
-    hasProcessedRedirect.current = true;
-    
-    try {
-      const auth = window.firebase.auth();
-      
-      // 檢查是否已經有登入的人 (避免重複登入導致的迴圈)
-      if (auth.currentUser) {
-           console.log('偵測到已登入用戶，停止 Redirect 檢查');
-           return;
-      }
-
-      const result = await auth.getRedirectResult();
-      
-      if (!result.user) {
-        sessionStorage.removeItem('google_auth_mode'); // 清理標記
+  useEffect(() => {
+    const handleRedirectResult = async () => {
+      // 若已停用 Google 登入/註冊：清掉可能殘留的標記，避免卡住或誤判
+      if (!ENABLE_GOOGLE_AUTH) {
+        const authMode = sessionStorage.getItem('google_auth_mode');
+        if (authMode) {
+          sessionStorage.removeItem('google_auth_mode');
+          // 只有在確定是 Google 流程殘留時才嘗試登出，避免影響 Email 登入狀態
+          try {
+            if (window.firebase && window.firebase.auth) {
+              window.firebase.auth().signOut().catch(() => {});
+            }
+          } catch (e) {}
+        }
         return;
       }
+      // 1. 如果 Firebase 還沒載入，或是已經處理過，就跳過
+      if (hasProcessedRedirect.current || !window.firebase) return;
       
-      // ... (以下是原本的登入邏輯) ...
-      const userId = result.user.uid;
-      const userEmail = result.user.email;
-      sessionStorage.removeItem('google_auth_mode'); // 用完即丟
+      // 2. ★ 防護機制：如果根本沒有「Google 登入流程」的標記，就直接結束
+      // 這能有效防止 Safari 在重新整理頁面時誤判，造成無限轉圈
+      const authMode = sessionStorage.getItem('google_auth_mode');
+      if (!authMode) return; 
+
+      hasProcessedRedirect.current = true;
       
-      const db = window.firebase.firestore();
-      const userDoc = await db.collection('users').doc(userId).get();
-      
-      if (authMode === 'login') {
-        if (!userDoc.exists || !userDoc.data().shopId) {
-          await auth.signOut();
-          setError('此 Google 帳號尚未註冊。請點擊下方「註冊新商店」進行註冊');
-          setMode('select');
-          setLoading(false);
-          return;
-        }
-        const userShopId = userDoc.data().shopId;
-        onLogin(userShopId, 'owner');
+      try {
+        const auth = window.firebase.auth();
         
-      } else if (authMode === 'register') {
-        if (userDoc.exists && userDoc.data().shopId) {
-          await auth.signOut();
-          setError('此 Google 帳號已註冊。請返回登入頁面進行登入');
-          setMode('select');
-          setLoading(false);
+        // 檢查是否已經有登入的人 (避免重複登入導致的迴圈)
+        if (auth.currentUser) {
+          console.log('偵測到已登入用戶，停止 Redirect 檢查');
           return;
         }
-        setEmail(userEmail);
-        if (ENABLE_GOOGLE_AUTH) setMode('google-register');
+
+        const result = await auth.getRedirectResult();
+        
+        if (!result.user) {
+          sessionStorage.removeItem('google_auth_mode'); // 清理標記
+          return;
+        }
+        
+        // ... (以下是原本的登入邏輯) ...
+        const userId = result.user.uid;
+        const userEmail = result.user.email;
+        sessionStorage.removeItem('google_auth_mode'); // 用完即丟
+        
+        const db = window.firebase.firestore();
+        const userDoc = await db.collection('users').doc(userId).get();
+        
+        if (authMode === 'login') {
+          if (!userDoc.exists || !userDoc.data().shopId) {
+            await auth.signOut();
+            setError('此 Google 帳號尚未註冊。請點擊下方「註冊新商店」進行註冊');
+            setMode('select');
+            setLoading(false);
+            return;
+          }
+          const userShopId = userDoc.data().shopId;
+          onLogin(userShopId, 'owner');
+          
+        } else if (authMode === 'register') {
+          if (userDoc.exists && userDoc.data().shopId) {
+            await auth.signOut();
+            setError('此 Google 帳號已註冊。請返回登入頁面進行登入');
+            setMode('select');
+            setLoading(false);
+            return;
+          }
+          setEmail(userEmail);
+          if (ENABLE_GOOGLE_AUTH) setMode('google-register');
+          setLoading(false);
+        }
+        
+      } catch (e) {
+        console.error('Redirect 處理錯誤:', e);
+        setError('登入處理失敗：' + e.message);
         setLoading(false);
+        sessionStorage.removeItem('google_auth_mode'); // 出錯也要清理
       }
-      
-    } catch (e) {
-      console.error('Redirect 處理錯誤:', e);
-      setError('登入處理失敗：' + e.message);
-      setLoading(false);
-      sessionStorage.removeItem('google_auth_mode'); // 出錯也要清理
-    }
-  };
-  
-  // 稍微延遲執行，讓 Firebase SDK 有時間初始化
-  const timer = setTimeout(handleRedirectResult, 1000);
-  return () => clearTimeout(timer);
-}, []);
+    };
+    
+    // 稍微延遲執行，讓 Firebase SDK 有時間初始化
+    const timer = setTimeout(handleRedirectResult, 1000);
+    return () => clearTimeout(timer);
+  }, []);
 
   // 店員模式：自動載入店員名單
   useEffect(() => {
@@ -6391,7 +6457,7 @@ function MainAppContent() {
 
   // ★ 新增：當編輯酒譜新增基酒時，自動建立首頁的快速篩選方塊
   const handleAutoCreateGridBlock = (newBaseName, tabKey) => {
-    const key = ['classic', 'signature', 'single'].includes(tabKey)
+    const key = ['classic', 'signature', 'single', 'iba'].includes(tabKey)
       ? tabKey
       : 'classic';
 
@@ -6509,7 +6575,7 @@ function MainAppContent() {
   };
 
   const normalizeGridTabKey = (k) =>
-    ['classic', 'signature', 'single'].includes(k) ? k : 'classic';
+    ['classic', 'signature', 'single', 'iba'].includes(k) ? k : 'classic';
 
   const handleAddGridCategory = (tabKey, newCat) => {
     const key = normalizeGridTabKey(tabKey);
@@ -7084,7 +7150,21 @@ const handleLogout = async () => {
 
           await runBatchedWrites(db, (batch, r) => {
             const id = r?.id || generateId();
-            batch.set(shopRecCol.doc(id), { ...r, id }, { merge: true });
+            // 為酒譜名稱加上 (IBA) 後綴，避免與店內原有酒譜混淆
+            const addIBASuffix = (name) => {
+              if (!name) return name;
+              // 如果已經有 (IBA) 就不重複添加
+              if (name.includes('(IBA)')) return name;
+              return `${name} (IBA)`;
+            };
+            const recipeWithIBA = {
+              ...r,
+              id,
+              source: 'marketplace',
+              nameZh: addIBASuffix(r.nameZh),
+              nameEn: addIBASuffix(r.nameEn),
+            };
+            batch.set(shopRecCol.doc(id), recipeWithIBA, { merge: true });
           }, templateRecipes);
 
           showAlert(
@@ -7771,7 +7851,7 @@ const handleLogout = async () => {
 
   return (
     <div className="fixed inset-0 bg-slate-950 text-slate-200 font-sans flex flex-col w-full">
-      <style>{`:root{color-scheme:dark}.pt-safe{padding-top:env(safe-area-inset-top)}.pb-safe{padding-bottom:env(safe-area-inset-bottom)}.custom-scrollbar::-webkit-scrollbar{width:4px;background:#1e293b}.custom-scrollbar::-webkit-scrollbar-thumb{background:#475569;border-radius:2px}`}</style>
+      <style>{`:root{color-scheme:dark}.pt-safe{padding-top:env(safe-area-inset-top)}.pb-safe{padding-bottom:env(safe-area-inset-bottom)}.custom-scrollbar::-webkit-scrollbar{width:4px;background:#1e293b}.custom-scrollbar::-webkit-scrollbar-thumb{background:#475569;border-radius:2px}button:focus{outline:none}button:focus-visible{outline:none}`}</style>
 
       <main className="flex-1 relative overflow-hidden w-full">
       {activeTab === 'recipes' && (
