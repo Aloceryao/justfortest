@@ -7127,6 +7127,26 @@ const handleLogout = async () => {
     }
 
     try {
+      // 確保有 Firebase Auth 登入狀態（上傳需要 request.auth != null）
+      const auth = window.firebase.auth?.();
+      if (!auth) {
+        alert('⚠️ Firebase Auth 未初始化，無法上傳。');
+        return;
+      }
+
+      // 如果沒有登入，先進行匿名登入
+      if (!auth.currentUser) {
+        showAlert('準備上傳', '正在驗證權限...');
+        try {
+          await auth.signInAnonymously();
+          console.log('[上傳] 已以匿名模式登入，取得寫入權限');
+        } catch (authError) {
+          console.error('[上傳] 匿名登入失敗:', authError);
+          alert('⚠️ 無法取得上傳權限。請確認 Firebase Console 已啟用「Anonymous」登入方式。\n\n錯誤：' + authError.message);
+          return;
+        }
+      }
+
       const db = window.firebase.firestore();
       const ingCol = db.collection('official_templates').doc('v1').collection('ingredients');
       const recCol = db.collection('official_templates').doc('v1').collection('recipes');
