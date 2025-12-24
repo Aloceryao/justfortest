@@ -424,7 +424,7 @@ const safeString = (str) => (str || '').toString();
 // ==========================================
 // ★ 版本號設定 (修改這裡會同步更新登入頁與設定頁)
 // ==========================================
-const APP_VERSION = 'v18.3 (母艦IBA酒譜測試版)';
+const APP_VERSION = 'v18.3.1 (母艦測試版)';
 // ==========================================
 // Auth Feature Flag
 // ==========================================
@@ -7851,7 +7851,7 @@ const handleLogout = async () => {
 
   return (
     <div className="fixed inset-0 bg-slate-950 text-slate-200 font-sans flex flex-col w-full">
-      <style>{`:root{color-scheme:dark}.pt-safe{padding-top:env(safe-area-inset-top)}.pb-safe{padding-bottom:env(safe-area-inset-bottom)}.custom-scrollbar::-webkit-scrollbar{width:4px;background:#1e293b}.custom-scrollbar::-webkit-scrollbar-thumb{background:#475569;border-radius:2px}button:focus{outline:none}button:focus-visible{outline:none}`}</style>
+      <style>{`:root{color-scheme:dark}.pt-safe{padding-top:env(safe-area-inset-top)}.pb-safe{padding-bottom:env(safe-area-inset-bottom)}.custom-scrollbar::-webkit-scrollbar{width:4px;background:#1e293b}.custom-scrollbar::-webkit-scrollbar-thumb{background:#475569;border-radius:2px}button:focus{outline:none!important}button:focus-visible{outline:none!important}button:active{outline:none!important}button::-moz-focus-inner{border:0!important}*:focus{outline:none!important}*:focus-visible{outline:none!important}`}</style>
 
       <main className="flex-1 relative overflow-hidden w-full">
       {activeTab === 'recipes' && (
