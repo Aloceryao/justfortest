@@ -424,7 +424,7 @@ const safeString = (str) => (str || '').toString();
 // ==========================================
 // ★ 版本號設定 (修改這裡會同步更新登入頁與設定頁)
 // ==========================================
-const APP_VERSION = 'v18.3.1 (母艦測試版)';
+const APP_VERSION = 'v18.3.5 (IBA母艦測試版)';
 // ==========================================
 // Auth Feature Flag
 // ==========================================
@@ -1739,7 +1739,7 @@ const RecipeListScreen = ({
     return sourceList.filter((r) => {
       const matchCat =
         recipeCategoryFilter === 'all' ||
-        (recipeCategoryFilter === 'iba' && sourceList.includes(r)) ||
+        recipeCategoryFilter === 'iba' ||
         r.type === recipeCategoryFilter ||
         (recipeCategoryFilter === 'single' &&
           (r.type === 'soft' || r.isIngredient || r.type === 'single'));
@@ -3651,6 +3651,8 @@ const EditorSheet = ({
 
         const MAX_WIDTH = 1200;
         const MAX_HEIGHT = 1200;
+        // Firestore 單個文件限制 1MB，base64 會增加約 33% 大小，所以限制在 750KB 左右
+        const MAX_BASE64_SIZE = 750 * 1024; // 750KB，留一些緩衝空間
 
         if (width > height) {
           if (width > MAX_WIDTH) {
@@ -3671,7 +3673,40 @@ const EditorSheet = ({
         ctx.imageSmoothingQuality = 'high';
         ctx.drawImage(img, 0, 0, width, height);
 
-        const dataUrl = canvas.toDataURL('image/jpeg', 0.85);
+        // 嘗試不同品質等級，確保不超過大小限制
+        let quality = 0.85;
+        let dataUrl = canvas.toDataURL('image/jpeg', quality);
+        let attempts = 0;
+        const MAX_ATTEMPTS = 20; // 防止無限循環
+        
+        // 如果 base64 字串太大，逐步降低品質和尺寸
+        while (dataUrl.length > MAX_BASE64_SIZE && quality > 0.3 && attempts < MAX_ATTEMPTS) {
+          attempts++;
+          quality -= 0.1;
+          dataUrl = canvas.toDataURL('image/jpeg', quality);
+          
+          // 如果品質降到 0.5 以下還是太大，縮小尺寸
+          if (quality <= 0.5 && dataUrl.length > MAX_BASE64_SIZE && width > 100 && height > 100) {
+            width = Math.floor(width * 0.9);
+            height = Math.floor(height * 0.9);
+            canvas.width = width;
+            canvas.height = height;
+            ctx.imageSmoothingEnabled = true;
+            ctx.imageSmoothingQuality = 'high';
+            ctx.drawImage(img, 0, 0, width, height);
+            dataUrl = canvas.toDataURL('image/jpeg', quality);
+          }
+        }
+
+        // 最終檢查：如果還是太大，警告使用者
+        if (dataUrl.length > MAX_BASE64_SIZE) {
+          if (showAlert) {
+            showAlert('警告', `圖片壓縮後仍較大（${Math.round(dataUrl.length / 1024)}KB），可能會影響上傳。建議使用更小的圖片。`);
+          } else {
+            alert(`圖片壓縮後仍較大（${Math.round(dataUrl.length / 1024)}KB），可能會影響上傳。`);
+          }
+        }
+
         setItem({ ...item, image: dataUrl });
       };
       img.src = event.target.result;
@@ -7099,17 +7134,65 @@ const handleLogout = async () => {
       const safeIngredients = Array.isArray(ingredients) ? ingredients : [];
       const safeRecipes = Array.isArray(recipes) ? recipes : [];
 
+      // 檢查文件大小（Firestore 單個文件限制 1MB）
+      const MAX_DOC_SIZE = 1024 * 1024; // 1MB
+      let skippedRecipes = [];
+      let skippedIngredients = [];
+
+      // 計算 JSON 字串大小（近似值）
+      const estimateDocSize = (doc) => {
+        return JSON.stringify(doc).length;
+      };
+
       await runBatchedWrites(db, (batch, i) => {
         const id = i?.id || generateId();
-        batch.set(ingCol.doc(id), { ...i, id }, { merge: true });
+        const doc = { ...i, id };
+        const size = estimateDocSize(doc);
+        if (size > MAX_DOC_SIZE) {
+          skippedIngredients.push({ id, name: i.nameZh || i.nameEn || id, size: Math.round(size / 1024) });
+          console.warn(`⚠️ 材料 ${id} 超過大小限制（${Math.round(size / 1024)}KB），已跳過`);
+        } else {
+          batch.set(ingCol.doc(id), doc, { merge: true });
+        }
       }, safeIngredients);
 
       await runBatchedWrites(db, (batch, r) => {
         const id = r?.id || generateId();
-        batch.set(recCol.doc(id), { ...r, id }, { merge: true });
+        const doc = { ...r, id };
+        const size = estimateDocSize(doc);
+        if (size > MAX_DOC_SIZE) {
+          skippedRecipes.push({ id, name: r.nameZh || r.nameEn || id, size: Math.round(size / 1024) });
+          console.warn(`⚠️ 酒譜 ${id} 超過大小限制（${Math.round(size / 1024)}KB），已跳過`);
+        } else {
+          batch.set(recCol.doc(id), doc, { merge: true });
+        }
       }, safeRecipes);
 
-      showAlert('同步成功', `已上傳 ${safeRecipes.length} 筆酒譜、${safeIngredients.length} 筆材料到官方資料庫`);
+      // 顯示上傳結果
+      let message = `已上傳 ${safeRecipes.length - skippedRecipes.length} 筆酒譜、${safeIngredients.length - skippedIngredients.length} 筆材料到官方資料庫`;
+      if (skippedRecipes.length > 0 || skippedIngredients.length > 0) {
+        message += `\n\n⚠️ 以下項目因檔案過大（超過 1MB）已跳過：`;
+        if (skippedRecipes.length > 0) {
+          message += `\n\n酒譜（${skippedRecipes.length} 筆）：`;
+          skippedRecipes.slice(0, 5).forEach(r => {
+            message += `\n• ${r.name} (${r.size}KB)`;
+          });
+          if (skippedRecipes.length > 5) {
+            message += `\n... 還有 ${skippedRecipes.length - 5} 筆`;
+          }
+        }
+        if (skippedIngredients.length > 0) {
+          message += `\n\n材料（${skippedIngredients.length} 筆）：`;
+          skippedIngredients.slice(0, 5).forEach(i => {
+            message += `\n• ${i.name} (${i.size}KB)`;
+          });
+          if (skippedIngredients.length > 5) {
+            message += `\n... 還有 ${skippedIngredients.length - 5} 筆`;
+          }
+        }
+        message += `\n\n建議：移除或壓縮這些項目的圖片後重新上傳。`;
+      }
+      showAlert('同步完成', message);
     } catch (e) {
       console.error('Upload mothership error:', e);
       showAlert('錯誤', '上傳失敗：' + (e?.message || '未知錯誤'));
@@ -7145,17 +7228,31 @@ const handleLogout = async () => {
 
           await runBatchedWrites(db, (batch, i) => {
             const id = i?.id || generateId();
-            batch.set(shopIngCol.doc(id), { ...i, id }, { merge: true });
+            // 為材料名稱加上星號標記，並標記來源
+            const addStarMark = (name) => {
+              if (!name || typeof name !== 'string') return name || '';
+              // 如果已經有星號就不重複添加（檢查結尾是否有星號）
+              if (name.trim().endsWith('⭐')) return name;
+              return `${name.trim()} ⭐`;
+            };
+            const ingredientWithMark = {
+              ...i,
+              id,
+              source: 'marketplace',
+              nameZh: addStarMark(i.nameZh),
+              nameEn: addStarMark(i.nameEn),
+            };
+            batch.set(shopIngCol.doc(id), ingredientWithMark, { merge: true });
           }, templateIngredients);
 
           await runBatchedWrites(db, (batch, r) => {
             const id = r?.id || generateId();
             // 為酒譜名稱加上 (IBA) 後綴，避免與店內原有酒譜混淆
             const addIBASuffix = (name) => {
-              if (!name) return name;
+              if (!name || typeof name !== 'string') return name || '';
               // 如果已經有 (IBA) 就不重複添加
               if (name.includes('(IBA)')) return name;
-              return `${name} (IBA)`;
+              return `${name.trim()} (IBA)`;
             };
             const recipeWithIBA = {
               ...r,
