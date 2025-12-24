@@ -424,7 +424,7 @@ const safeString = (str) => (str || '').toString();
 // ==========================================
 // ★ 版本號設定 (修改這裡會同步更新登入頁與設定頁)
 // ==========================================
-const APP_VERSION = 'v18.3.6 (IBA母艦測試版)';
+const APP_VERSION = 'v18.3.7 (IBA母艦測試版)';
 // ==========================================
 // Auth Feature Flag
 // ==========================================
@@ -7134,19 +7134,37 @@ const handleLogout = async () => {
         return;
       }
 
+      // 檢查當前認證狀態
+      console.log('[上傳] 檢查認證狀態...');
+      console.log('[上傳] auth.currentUser:', auth.currentUser);
+      console.log('[上傳] auth.currentUser?.uid:', auth.currentUser?.uid);
+      console.log('[上傳] auth.currentUser?.email:', auth.currentUser?.email);
+
       // 如果沒有登入，先進行匿名登入
       if (!auth.currentUser) {
+        console.log('[上傳] 沒有登入狀態，嘗試匿名登入...');
         showAlert('準備上傳', '正在驗證權限...');
         try {
-          await auth.signInAnonymously();
-          console.log('[上傳] 已以匿名模式登入，取得寫入權限');
+          const userCredential = await auth.signInAnonymously();
+          console.log('[上傳] 匿名登入成功:', userCredential.user.uid);
+          // 等待一下確保認證狀態已更新
+          await new Promise(resolve => setTimeout(resolve, 500));
         } catch (authError) {
           console.error('[上傳] 匿名登入失敗:', authError);
           alert('⚠️ 無法取得上傳權限。請確認 Firebase Console 已啟用「Anonymous」登入方式。\n\n錯誤：' + authError.message);
           return;
         }
+      } else {
+        console.log('[上傳] 已有登入狀態，UID:', auth.currentUser.uid);
       }
 
+      // 再次確認認證狀態
+      if (!auth.currentUser) {
+        alert('⚠️ 認證狀態異常，無法上傳。請重新整理頁面後再試。');
+        return;
+      }
+
+      console.log('[上傳] 開始上傳，認證 UID:', auth.currentUser.uid);
       const db = window.firebase.firestore();
       const ingCol = db.collection('official_templates').doc('v1').collection('ingredients');
       const recCol = db.collection('official_templates').doc('v1').collection('recipes');
