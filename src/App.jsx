@@ -424,7 +424,7 @@ const safeString = (str) => (str || '').toString();
 // ==========================================
 // ★ 版本號設定 (修改這裡會同步更新登入頁與設定頁)
 // ==========================================
-const APP_VERSION = 'v18.3.8 (IBA母艦測試版)';
+const APP_VERSION = 'v18.3.9 (IBA母艦測試版)';
 // ==========================================
 // Auth Feature Flag
 // ==========================================
@@ -5551,6 +5551,7 @@ const LoginScreen = ({ onLogin }) => {
     if (!email || !password) return setError('請輸入 Email 和密碼');
     if (!shopId) return setError('請輸入商店代碼');
     if (password.length < 6) return setError('密碼至少需要 6 個字元');
+    if (shopId.length < 3) return setError('商店代碼太短，請至少輸入 3 個字元');
     
     setLoading(true);
     setError('');
@@ -5619,6 +5620,7 @@ const LoginScreen = ({ onLogin }) => {
   // ========== Google 註冊新商店 ==========
   const handleGoogleRegister = async () => {
     if (!shopId) return setError('請輸入商店代碼');
+    if (shopId.length < 3) return setError('商店代碼太短，請至少輸入 3 個字元');
     
     setLoading(true);
     setError('');
@@ -5976,6 +5978,9 @@ const LoginScreen = ({ onLogin }) => {
                 className="w-full bg-slate-900 border border-slate-700 rounded-xl p-4 text-white outline-none focus:border-amber-500 font-mono"
                 placeholder="商店代碼（英文小寫，例如：my_bar）"
               />
+              <p className="text-xs text-slate-500 pl-2 mt-1">
+  * 請設定 3 個字元以上 (例如: bar01)
+</p>
               <input
                 type="text"
                 value={shopName}
